@@ -21,6 +21,10 @@ class Settings:
         "postgresql+psycopg://postgres:postgres@localhost:5432/sillicobio",
     )
     cors_origins: list[str] = None
+    cors_origin_regex: str | None = getenv(
+        "CORS_ORIGIN_REGEX",
+        r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    )
     session_secret_key: str = getenv("SESSION_SECRET_KEY", "change-me-in-local-env")
     session_cookie_name: str = getenv("SESSION_COOKIE_NAME", "SESSION")
     session_https_only: bool = getenv("SESSION_HTTPS_ONLY", "false").lower() == "true"
