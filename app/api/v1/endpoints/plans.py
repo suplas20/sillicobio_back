@@ -39,11 +39,11 @@ def list_plans(
         stmt = stmt.where(TbExpPlan.purpose.ilike(f"%{purpose}%"))
         count_stmt = count_stmt.where(TbExpPlan.purpose.ilike(f"%{purpose}%"))
     if createdFrom:
-        start = datetime.strptime(createdFrom, "%Y%m%d")
+        start = _parse_date_filter(createdFrom, "createdFrom")
         stmt = stmt.where(TbExpPlan.reg_dt >= start)
         count_stmt = count_stmt.where(TbExpPlan.reg_dt >= start)
     if createdTo:
-        end = datetime.strptime(createdTo, "%Y%m%d").replace(hour=23, minute=59, second=59)
+        end = _parse_date_filter(createdTo, "createdTo").replace(hour=23, minute=59, second=59)
         stmt = stmt.where(TbExpPlan.reg_dt <= end)
         count_stmt = count_stmt.where(TbExpPlan.reg_dt <= end)
 
@@ -79,6 +79,7 @@ def create_plan(payload: PlanSaveRequest, db: DbSession, member: CurrentMember) 
         reg_id=member.member_id,
     )
     db.add(plan)
+    db.flush()
     batches = []
     for index in range(1, 5):
         batch = TbBatch(
@@ -187,6 +188,21 @@ def _file_response(record: TbExpFile) -> dict:
         "fileSize": record.file_size,
         "mimeType": record.mime_type,
     }
+
+
+def _parse_date_filter(value: str, field_name: str) -> datetime:
+    for fmt in ("%Y%m%d", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            pass
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={
+            "code": "INVALID_DATE",
+            "message": f"{field_name} must be YYYYMMDD or YYYY-MM-DD.",
+        },
+    )
 
 
 def _save_upload(file: UploadFile, area: str, resource_id: str) -> Path:

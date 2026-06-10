@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.v1.router import api_router
+from app.core.audit import AuditLogMiddleware
 from app.core.config import settings
 
 
@@ -21,6 +22,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(AuditLogMiddleware)
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.session_secret_key,

@@ -127,6 +127,8 @@ axios.defaults.withCredentials = true;
 
 1차 개발 범위에서는 로그 조회 화면/API를 제공하지 않습니다.
 
+프론트엔드가 별도로 호출해야 하는 Audit Log API도 제공하지 않습니다. 서버가 API 요청 성공 후 `tb_audit_log`에 자동 저장합니다.
+
 서버는 아래 이벤트 발생 시 DB에 로그를 자동 생성합니다.
 
 - 로그인
@@ -152,6 +154,20 @@ axios.defaults.withCredentials = true;
   "createdAt": "20260610120000"
 }
 ```
+
+현재 자동 저장 필드:
+
+| DB 컬럼 | 내용 |
+| --- | --- |
+| `action_type` | `LOGIN`, `LOGOUT`, `CREATE`, `UPDATE`, `DELETE`, `UPLOAD`, `DOWNLOAD`, `CALC_VIEW` |
+| `target_table` | 대상 테이블명 |
+| `target_id` | 대상 ID. 경로에서 확인 가능한 경우 저장 |
+| `request_method` | HTTP method |
+| `request_path` | 요청 path |
+| `client_ip` | 클라이언트 IP |
+| `user_agent` | 브라우저 user-agent |
+| `reg_id` | 요청 사용자 ID |
+| `reg_dt` | 로그 생성 시각 |
 
 ---
 

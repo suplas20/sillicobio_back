@@ -112,14 +112,13 @@ def update_batch_detail(
     if batch is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     if payload.startDt:
-        batch.start_dt = datetime.strptime(payload.startDt, "%Y%m%d").date()
+        batch.start_dt = _parse_date(payload.startDt, "startDt").date()
     batch.prep_time = payload.params.prepTime
     batch.equip_vol = payload.params.equipVol
     batch.purify_yield = payload.params.purifyYield
     batch.dcw_od_factor = payload.params.dcwOdFactor
     batch.feed_glucose_conc = payload.params.feedGlucoseConc
     batch.feed_density = payload.params.feedDensity
-    batch.feed_glucose_per_feed = payload.params.feedGlucosePerFeed
     batch.cmp_type = payload.comparison.type
     batch.cmp_batch_id = payload.comparison.targetBatchId
     batch.upd_dt = datetime.now()
@@ -159,6 +158,27 @@ def save_sampling(batch_id: str, payload: SamplingSaveRequest, db: DbSession, me
     _replace_sampling(db, batch_id, payload.rows, member.member_id)
     db.commit()
     return {"batchId": batch_id, "message": "샘플링 데이터가 저장되었습니다.", "recalculated": True}
+
+
+@router.delete("/{batch_id}/sampling", status_code=status.HTTP_204_NO_CONTENT)
+def delete_sampling(batch_id: str, db: DbSession, _: CurrentMember) -> None:
+    if db.get(TbBatch, batch_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    db.execute(delete(TbCalcFull).where(TbCalcFull.batch_id == batch_id))
+    db.execute(delete(TbCalcSummary).where(TbCalcSummary.batch_id == batch_id))
+    db.execute(delete(TbSampling).where(TbSampling.batch_id == batch_id))
+    db.commit()
+
+
+@router.delete("/{batch_id}/sampling/{sample_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_sampling_row(batch_id: str, sample_id: int, db: DbSession, _: CurrentMember) -> None:
+    row = db.get(TbSampling, sample_id)
+    if row is None or row.batch_id != batch_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    db.execute(delete(TbCalcFull).where(TbCalcFull.sample_id == sample_id))
+    db.execute(delete(TbCalcSummary).where(TbCalcSummary.batch_id == batch_id))
+    db.delete(row)
+    db.commit()
 
 
 @router.get("/{batch_id}/calc")
@@ -262,6 +282,7 @@ def _batch_detail_response(db: DbSession, batch: TbBatch) -> dict:
     return {
         "batchId": batch.batch_id,
         "planId": batch.exp_id,
+        "planCmp": plan.cmp_batch_id if plan else None,
         "purpose": plan.purpose if plan else None,
         "startDt": yyyymmdd(batch.start_dt),
         "params": {
@@ -357,6 +378,7 @@ def _replace_sampling(db: DbSession, batch_id: str, rows: list, member_id: str) 
 
 def _sampling_response(row: TbSampling) -> dict:
     return {
+        "id": row.sample_id,
         "samplingTime": number(row.sampling_time),
         "od": number(row.od),
         "feedWeight": number(row.feed_weight),
@@ -388,6 +410,21 @@ def _serialize(value):
     if hasattr(value, "as_tuple"):
         return number(value)
     return value
+
+
+def _parse_date(value: str, field_name: str) -> datetime:
+    for fmt in ("%Y%m%d", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            pass
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={
+            "code": "INVALID_DATE",
+            "message": f"{field_name} must be YYYYMMDD or YYYY-MM-DD.",
+        },
+    )
 
 
 def _save_upload(file: UploadFile, area: str, resource_id: str) -> Path:

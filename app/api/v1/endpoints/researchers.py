@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
-from app.api.deps import AdminMember, DbSession
+from app.api.deps import AdminMember, CurrentMember, DbSession
 from app.models.researcher import TbResearcher
 from app.schemas.researcher_schema import ResearcherCreate, ResearcherUpdate
 
@@ -14,7 +14,7 @@ router = APIRouter()
 @router.get("")
 def list_researchers(
     db: DbSession,
-    _: AdminMember,
+    _: CurrentMember,
     id: str | None = None,
     name: str | None = None,
     page: int = Query(1, ge=1),
@@ -34,7 +34,7 @@ def list_researchers(
 
 
 @router.get("/{researcher_id}")
-def get_researcher(researcher_id: str, db: DbSession, _: AdminMember) -> dict:
+def get_researcher(researcher_id: str, db: DbSession, _: CurrentMember) -> dict:
     researcher = db.get(TbResearcher, researcher_id)
     if researcher is None or researcher.use_yn != "Y":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
