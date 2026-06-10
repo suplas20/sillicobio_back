@@ -69,3 +69,9 @@ Import these two files into Postman:
 - `postman/SillicoBio_LIMS_API.postman_environment.example.json`
 
 After importing the example environment, set `adminPassword` locally. Select the environment, run `00 Auth / Login as admin`, then run the read-only smoke requests. Postman keeps the `SESSION` cookie automatically after login.
+
+## Frontend Integration
+
+Frontend API integration notes are in:
+
+- `docs/FRONTEND_API_INTEGRATION.md`

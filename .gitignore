@@ -96,6 +96,7 @@ __marimo__/
 
 # Local duplicate/private notes
 .docs/
+docs/
 
 # Postman local environments may contain passwords or host-specific values.
 # Keep collections in git, but create/share sanitized example environments only.
