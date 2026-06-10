@@ -1,0 +1,610 @@
+{
+  "info": {
+    "_postman_id": "6d5139c5-7f88-4c67-8702-e2ebc54f0001",
+    "name": "SillicoBio LIMS API",
+    "description": "Postman collection for SillicoBio LIMS FastAPI backend. Import the matching environment and run Auth > Login before session-protected requests. Postman keeps the SESSION cookie automatically.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('HTTP status is successful', function () {",
+          "  pm.expect(pm.response.code).to.be.within(200, 299);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "00 Auth",
+      "item": [
+        {
+          "name": "Login as admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.environment.set('loggedInUserId', json.id);",
+                  "pm.environment.set('loggedInRole', json.role);",
+                  "pm.test('logged in as admin', function () {",
+                  "  pm.expect(json.role).to.eql('ADMIN');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{adminId}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Current user",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 Smoke - Read Only",
+      "description": "Run Login first. These requests should not mutate the database.",
+      "item": [
+        {
+          "name": "List members",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/members?page=1&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "members"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get member",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/members/{{adminId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "members",
+                "{{adminId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List researchers",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/researchers?page=1&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "researchers"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get researcher",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/researchers/{{researcherId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "researchers",
+                "{{researcherId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List plans",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/plans?page=1&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "plans"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get plan",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/plans/{{planId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "plans",
+                "{{planId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List batches",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/batches?page=1&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "batches"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get batch detail",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/batches/{{batchId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "batches",
+                "{{batchId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Batch options",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/batches/options?excludeBatchId={{batchId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "batches",
+                "options"
+              ],
+              "query": [
+                {
+                  "key": "excludeBatchId",
+                  "value": "{{batchId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get sampling",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/batches/{{batchId}}/sampling",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "batches",
+                "{{batchId}}",
+                "sampling"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get calculation",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/batches/{{batchId}}/calc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "batches",
+                "{{batchId}}",
+                "calc"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get calculation view",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/batches/{{batchId}}/calc-view",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "batches",
+                "{{batchId}}",
+                "calc-view"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List results",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/results?page=1&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "results"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get result detail",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/results/{{batchId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "results",
+                "{{batchId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Write Examples",
+      "description": "These requests mutate the database. Run them intentionally.",
+      "item": [
+        {
+          "name": "Create member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{newMemberId}}\",\n  \"name\": \"Postman User\",\n  \"password\": \"1234\",\n  \"role\": \"USER\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/members",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "members"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create researcher",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.id) pm.environment.set('createdResearcherId', json.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Researcher\",\n  \"email\": \"postman.researcher@sillicobio.local\",\n  \"tel\": \"010-0000-0000\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/researchers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "researchers"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create plan with four batches",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.plan && json.plan.id) pm.environment.set('createdPlanId', json.plan.id);",
+                  "if (json.batches && json.batches[0]) pm.environment.set('createdBatchId', json.batches[0].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"purpose\": \"Postman API test plan\",\n  \"strain\": \"Saccharomyces cerevisiae SB-LUT-01\",\n  \"batch1\": \"Control condition\",\n  \"batch2\": \"Feed glucose up\",\n  \"batch3\": \"Inoculation ratio change\",\n  \"batch4\": \"Temperature optimization\",\n  \"cmp\": null,\n  \"result\": \"Created from Postman collection.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/plans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "plans"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update batch detail",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startDt\": \"20260610\",\n  \"params\": {\n    \"prepTime\": 24,\n    \"equipVol\": 5,\n    \"purifyYield\": 0.85,\n    \"dcwOdFactor\": 0.31,\n    \"feedGlucoseConc\": 600,\n    \"feedDensity\": 1.2,\n    \"feedGlucosePerFeed\": 0.5\n  },\n  \"comparison\": {\n    \"type\": \"ALL\",\n    \"targetBatchId\": null\n  },\n  \"researchers\": [\n    { \"role\": \"RES1\", \"id\": \"{{researcherId}}\" }\n  ],\n  \"samplingRows\": []\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/batches/{{batchId}}/detail",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "batches",
+                "{{batchId}}",
+                "detail"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Save sampling rows",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rows\": [\n    {\n      \"samplingTime\": 0,\n      \"od\": 0.2,\n      \"feedWeight\": 0,\n      \"brothVolume\": 5,\n      \"targetProdConc\": 0,\n      \"glucoseConc\": 20,\n      \"lycopene\": 0,\n      \"aCarotene\": 0,\n      \"bCarotene\": 0,\n      \"citricAcid\": 0,\n      \"pyruvicAcid\": 0,\n      \"succinicAcid\": 0,\n      \"lacticAcid\": 0,\n      \"aceticAcid\": 0\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/batches/{{batchId}}/sampling",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "batches",
+                "{{batchId}}",
+                "sampling"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upload plan file",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "fileType",
+                  "value": "PLAN",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/plans/{{planId}}/files",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "plans",
+                "{{planId}}",
+                "files"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upload batch file",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "fileType",
+                  "value": "DO_PH",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/batches/{{batchId}}/files",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "batches",
+                "{{batchId}}",
+                "files"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
