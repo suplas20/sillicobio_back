@@ -3,6 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Request, Response, status
 
 from app.api.deps import CurrentMember, DbSession
+from app.core.client_ip import get_client_ip
 from app.services.auth_service import authenticate_member
 from app.schemas.auth_schema import LoginRequest, UserSessionResponse
 from app.utils.exceptions import AppException
@@ -22,7 +23,7 @@ def login(payload: LoginRequest, request: Request, db: DbSession) -> UserSession
         )
 
     member.last_login_dt = datetime.now()
-    member.last_login_ip = request.client.host if request.client else None
+    member.last_login_ip = get_client_ip(request)
     db.commit()
 
     request.session["member_id"] = member.member_id

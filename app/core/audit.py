@@ -4,6 +4,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
+from app.core.client_ip import get_client_ip
 from app.db.session import SessionLocal
 from app.models.audit_log import TbAuditLog
 
@@ -46,7 +47,7 @@ def _write_audit_log(request: Request, actor_id: str | None) -> None:
                 target_id=target_id,
                 request_method=request.method,
                 request_path=request.url.path,
-                client_ip=request.client.host if request.client else None,
+                client_ip=get_client_ip(request),
                 user_agent=request.headers.get("user-agent"),
                 reg_id=actor_id,
                 reg_dt=datetime.now(),
