@@ -5,6 +5,7 @@ from app.api.v1.endpoints import (
     auth,
     batch_data,
     batches,
+    best_batches,
     experiments,
     members,
     plans,
@@ -21,6 +22,7 @@ api_router.include_router(researchers.router, prefix="/researchers", tags=["Rese
 api_router.include_router(plans.router, prefix="/plans", tags=["Plans"])
 api_router.include_router(experiments.router, prefix="/experiments", tags=["Experiments"])
 api_router.include_router(batches.router, prefix="/batches", tags=["Batches"])
+api_router.include_router(best_batches.router, prefix="/best-batches", tags=["Best Batches"])
 api_router.include_router(batch_data.router, prefix="/batch-data", tags=["Batch Data"])
 api_router.include_router(results.router, prefix="/results", tags=["Results"])
 api_router.include_router(attachments.router, prefix="/attachments", tags=["Attachments"])

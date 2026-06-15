@@ -61,3 +61,13 @@ class BatchDetailSaveRequest(BaseModel):
 
 class SamplingSaveRequest(BaseModel):
     rows: list[SamplingRow] = Field(default_factory=list)
+
+
+class BestBatchCreateRequest(BaseModel):
+    batch_id: str
+    reg_id: str | None = None
+
+
+class CompareBatchSaveRequest(BaseModel):
+    cmp_batch_id: str
+    upd_id: str | None = None

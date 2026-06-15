@@ -3,6 +3,7 @@ from app.models.batch import TbBatch
 from app.models.batch_data import TbBatchData, TbSampling
 from app.models.batch_file import TbBatchFile
 from app.models.batch_researcher import TbBatchResearcher
+from app.models.best_batch import TbBestBatch
 from app.models.calc_full import TbCalcFull
 from app.models.calc_summary import TbCalcSummary
 from app.models.exp_file import TbExpFile
@@ -16,6 +17,7 @@ __all__ = [
     "TbBatchData",
     "TbBatchFile",
     "TbBatchResearcher",
+    "TbBestBatch",
     "TbCalcFull",
     "TbCalcSummary",
     "TbExpFile",

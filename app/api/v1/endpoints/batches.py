@@ -4,7 +4,7 @@ from shutil import copyfileobj
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import delete, func, select
+from sqlalchemy import case, delete, func, select
 
 from app.api.deps import CurrentMember, DbSession
 from app.core.config import settings
@@ -12,11 +12,12 @@ from app.models.batch import TbBatch
 from app.models.batch_data import TbSampling
 from app.models.batch_file import TbBatchFile
 from app.models.batch_researcher import TbBatchResearcher
+from app.models.best_batch import TbBestBatch
 from app.models.calc_full import TbCalcFull
 from app.models.calc_summary import TbCalcSummary
 from app.models.experiment import TbExpPlan
 from app.models.researcher import TbResearcher
-from app.schemas.api_schema import BatchDetailSaveRequest, SamplingSaveRequest
+from app.schemas.api_schema import BatchDetailSaveRequest, CompareBatchSaveRequest, SamplingSaveRequest
 from app.utils.formatters import number, yyyymmdd
 
 
@@ -74,12 +75,226 @@ def batch_options(
         stmt = stmt.where(TbBatch.batch_id != excludeBatchId)
     if keyword:
         stmt = stmt.where((TbBatch.batch_id.ilike(f"%{keyword}%")) | (TbExpPlan.purpose.ilike(f"%{keyword}%")))
-    rows = db.execute(stmt.order_by(TbBatch.batch_id).limit(100)).all()
+    rows = db.execute(stmt.order_by(TbBatch.batch_id)).all()
+
+    batch_ids = [b.batch_id for b, _ in rows]
+    sampling_map: dict[str, TbSampling] = {}
+    if batch_ids:
+        max_st_sub = (
+            select(TbSampling.batch_id, func.max(TbSampling.sampling_time).label("max_st"))
+            .where(TbSampling.batch_id.in_(batch_ids))
+            .group_by(TbSampling.batch_id)
+            .subquery()
+        )
+        max_sid_sub = (
+            select(TbSampling.batch_id, func.max(TbSampling.sample_id).label("max_sid"))
+            .join(
+                max_st_sub,
+                (TbSampling.batch_id == max_st_sub.c.batch_id)
+                & (TbSampling.sampling_time == max_st_sub.c.max_st),
+            )
+            .group_by(TbSampling.batch_id)
+            .subquery()
+        )
+        s_rows = db.scalars(
+            select(TbSampling).join(max_sid_sub, TbSampling.sample_id == max_sid_sub.c.max_sid)
+        ).all()
+        for s in s_rows:
+            sampling_map[s.batch_id] = s
+
+    def to_item(batch: TbBatch, plan: TbExpPlan) -> dict:
+        s = sampling_map.get(batch.batch_id)
+        return {
+            "batchId": batch.batch_id,
+            "planId": batch.exp_id,
+            "purpose": plan.purpose,
+            "lastSampledAt": s.reg_dt.strftime("%Y-%m-%d %H:%M") if s and s.reg_dt else None,
+            "samplingTime": number(s.sampling_time) if s else None,
+            "od": number(s.od) if s else None,
+            "feedWeight": number(s.feed_weight) if s else None,
+            "brothVolume": number(s.broth_volume) if s else None,
+            "targetProdConc": number(s.target_prod_conc) if s else None,
+            "glucoseConc": number(s.glucose_conc) if s else None,
+            "lycopene": number(s.lycopene) if s else None,
+            "aCarotene": number(s.a_carotene) if s else None,
+            "bCarotene": number(s.b_carotene) if s else None,
+            "citricAcid": number(s.citric_acid) if s else None,
+            "pyruvicAcid": number(s.pyruvic_acid) if s else None,
+            "succinicAcid": number(s.succinic_acid) if s else None,
+            "lacticAcid": number(s.lactic_acid) if s else None,
+            "aceticAcid": number(s.acetic_acid) if s else None,
+        }
+
+    return {"items": [to_item(b, p) for b, p in rows]}
+
+
+@router.get("/search")
+def search_batches(
+    db: DbSession,
+    _: CurrentMember,
+    keyword: str | None = None,
+    sort_field: str = "sampling_time",
+    sort_order: str = "desc",
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+) -> dict:
+    last_sampling = (
+        select(
+            TbSampling.batch_id.label("batch_id"),
+            TbSampling.reg_dt.label("last_sampled_at"),
+            TbSampling.sampling_time.label("sampling_time"),
+            TbSampling.od.label("od"),
+            TbSampling.feed_weight.label("feed_weight"),
+            TbSampling.broth_volume.label("broth_volume"),
+            TbSampling.target_prod_conc.label("target_prod_conc"),
+            TbSampling.glucose_conc.label("glucose_conc"),
+            TbSampling.lycopene.label("lycopene"),
+            TbSampling.a_carotene.label("a_carotene"),
+            TbSampling.b_carotene.label("b_carotene"),
+            TbSampling.citric_acid.label("citric_acid"),
+            TbSampling.pyruvic_acid.label("pyruvic_acid"),
+            TbSampling.succinic_acid.label("succinic_acid"),
+            TbSampling.lactic_acid.label("lactic_acid"),
+            TbSampling.acetic_acid.label("acetic_acid"),
+            func.row_number()
+            .over(
+                partition_by=TbSampling.batch_id,
+                order_by=(TbSampling.sampling_time.desc(), TbSampling.sample_id.desc()),
+            )
+            .label("rn"),
+        )
+        .subquery()
+    )
+    best_batch = (
+        select(
+            TbBestBatch.batch_id.label("batch_id"),
+            func.min(TbBestBatch.sort_ord).label("sort_ord"),
+            func.min(TbBestBatch.reg_dt).label("best_reg_dt"),
+        )
+        .group_by(TbBestBatch.batch_id)
+        .subquery()
+    )
+
+    sort_columns = {
+        "batch_id": TbBatch.batch_id,
+        "last_sampled_at": last_sampling.c.last_sampled_at,
+        "sampling_time": last_sampling.c.sampling_time,
+        "od": last_sampling.c.od,
+        "feed_weight": last_sampling.c.feed_weight,
+        "broth_volume": last_sampling.c.broth_volume,
+        "target_prod_conc": last_sampling.c.target_prod_conc,
+        "glucose_conc": last_sampling.c.glucose_conc,
+        "lycopene": last_sampling.c.lycopene,
+        "a_carotene": last_sampling.c.a_carotene,
+        "b_carotene": last_sampling.c.b_carotene,
+        "citric_acid": last_sampling.c.citric_acid,
+        "pyruvic_acid": last_sampling.c.pyruvic_acid,
+        "succinic_acid": last_sampling.c.succinic_acid,
+        "lactic_acid": last_sampling.c.lactic_acid,
+        "acetic_acid": last_sampling.c.acetic_acid,
+    }
+    if sort_field not in sort_columns:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid sort_field")
+    sort_order = sort_order.lower()
+    if sort_order not in {"asc", "desc"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid sort_order")
+
+    filters = []
+    if keyword:
+        filters.append(TbBatch.batch_id.ilike(f"%{keyword}%"))
+
+    count_stmt = select(func.count()).select_from(TbBatch)
+    if filters:
+        count_stmt = count_stmt.where(*filters)
+    total_count = db.scalar(count_stmt) or 0
+
+    sort_column = sort_columns[sort_field]
+    sort_expr = sort_column.asc() if sort_order == "asc" else sort_column.desc()
+    stmt = (
+        select(
+            TbBatch.batch_id.label("batch_id"),
+            TbBatch.exp_id.label("exp_id"),
+            TbBatch.batch_no.label("batch_no"),
+            last_sampling.c.last_sampled_at,
+            last_sampling.c.sampling_time,
+            last_sampling.c.od,
+            last_sampling.c.feed_weight,
+            last_sampling.c.broth_volume,
+            last_sampling.c.target_prod_conc,
+            last_sampling.c.glucose_conc,
+            last_sampling.c.lycopene,
+            last_sampling.c.a_carotene,
+            last_sampling.c.b_carotene,
+            last_sampling.c.citric_acid,
+            last_sampling.c.pyruvic_acid,
+            last_sampling.c.succinic_acid,
+            last_sampling.c.lactic_acid,
+            last_sampling.c.acetic_acid,
+            case((best_batch.c.batch_id.is_not(None), True), else_=False).label("is_best"),
+        )
+        .outerjoin(last_sampling, (TbBatch.batch_id == last_sampling.c.batch_id) & (last_sampling.c.rn == 1))
+        .outerjoin(best_batch, TbBatch.batch_id == best_batch.c.batch_id)
+        .order_by(
+            case((best_batch.c.batch_id.is_not(None), 0), else_=1),
+            best_batch.c.sort_ord.asc().nullslast(),
+            best_batch.c.best_reg_dt.desc().nullslast(),
+            sort_expr.nullslast(),
+            TbBatch.batch_id.asc(),
+        )
+        .offset((page - 1) * limit)
+        .limit(limit)
+    )
+    if filters:
+        stmt = stmt.where(*filters)
+
+    rows = db.execute(stmt).mappings().all()
     return {
-        "items": [
-            {"batchId": batch.batch_id, "planId": batch.exp_id, "purpose": plan.purpose}
-            for batch, plan in rows
-        ]
+        "page": page,
+        "limit": limit,
+        "total_count": total_count,
+        "items": [_batch_search_response(row) for row in rows],
+    }
+
+
+@router.put("/{batch_id}/compare-batch")
+def save_compare_batch(
+    batch_id: str,
+    payload: CompareBatchSaveRequest,
+    db: DbSession,
+    member: CurrentMember,
+) -> dict:
+    batch = db.get(TbBatch, batch_id)
+    if batch is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    if db.get(TbBatch, payload.cmp_batch_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+    batch.cmp_type = "BATCH"
+    batch.cmp_batch_id = payload.cmp_batch_id
+    batch.upd_id = member.member_id
+    batch.upd_dt = datetime.now()
+    db.commit()
+    return {
+        "message": "비교배치가 저장되었습니다.",
+        "batch": {
+            "batch_id": batch.batch_id,
+            "cmp_type": batch.cmp_type,
+            "cmp_batch_id": batch.cmp_batch_id,
+        },
+    }
+
+
+@router.get("/{batch_id}/compare-batch")
+def get_compare_batch(batch_id: str, db: DbSession, _: CurrentMember) -> dict:
+    batch = db.get(TbBatch, batch_id)
+    if batch is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    cmp_batch = db.get(TbBatch, batch.cmp_batch_id) if batch.cmp_batch_id else None
+    return {
+        "batch_id": batch.batch_id,
+        "cmp_type": batch.cmp_type,
+        "cmp_batch_id": batch.cmp_batch_id,
+        "cmp_batch_name": cmp_batch.batch_id if cmp_batch else None,
     }
 
 
@@ -275,6 +490,32 @@ SAMPLING_COLUMNS = [
     "lacticAcid",
     "aceticAcid",
 ]
+
+
+def _batch_search_response(row) -> dict:
+    last_sampled_at = row["last_sampled_at"]
+    return {
+        "batch_id": row["batch_id"],
+        "exp_id": row["exp_id"],
+        "batch_no": row["batch_no"],
+        "batch_name": row["batch_id"],
+        "is_best": row["is_best"],
+        "last_sampled_at": last_sampled_at.isoformat() if last_sampled_at else None,
+        "sampling_time": number(row["sampling_time"]),
+        "od": number(row["od"]),
+        "feed_weight": number(row["feed_weight"]),
+        "broth_volume": number(row["broth_volume"]),
+        "target_prod_conc": number(row["target_prod_conc"]),
+        "glucose_conc": number(row["glucose_conc"]),
+        "lycopene": number(row["lycopene"]),
+        "a_carotene": number(row["a_carotene"]),
+        "b_carotene": number(row["b_carotene"]),
+        "citric_acid": number(row["citric_acid"]),
+        "pyruvic_acid": number(row["pyruvic_acid"]),
+        "succinic_acid": number(row["succinic_acid"]),
+        "lactic_acid": number(row["lactic_acid"]),
+        "acetic_acid": number(row["acetic_acid"]),
+    }
 
 
 def _batch_detail_response(db: DbSession, batch: TbBatch) -> dict:
