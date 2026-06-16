@@ -656,11 +656,13 @@ Set-Cookie: SESSION=<server-session-id>; HttpOnly; Path=/; SameSite=Lax
 }
 ```
 
-### 6.3 배치 상세 통합 저장
+### 6.3 배치 상세 저장
 
 `PUT /batches/{batchId}/detail`
 
-배치 기본내용, 비교배치, 참여연구원, 샘플링 데이터를 한 번에 저장합니다.
+배치 기본내용, 비교배치, 참여연구원을 저장합니다.
+
+샘플링 데이터는 이 API에서 저장하지 않습니다. 샘플링 변경은 `PUT /batches/{batchId}/sampling`을 사용합니다.
 
 **Request**
 
@@ -686,6 +688,8 @@ Set-Cookie: SESSION=<server-session-id>; HttpOnly; Path=/; SameSite=Lax
   "samplingRows": []
 }
 ```
+
+`samplingRows`는 하위 호환을 위해 요청 스키마에 남아 있지만, 상세 저장 API에서는 처리하지 않습니다.
 
 **Response** `200 OK`
 
@@ -970,7 +974,7 @@ Set-Cookie: SESSION=<server-session-id>; HttpOnly; Path=/; SameSite=Lax
 | Plan | POST | `/plans/{id}/files` | 실험 파일 업로드 | 로그인 |
 | Batch | GET | `/batches` | 배치 목록 | 로그인 |
 | Batch | GET | `/batches/{batchId}` | 배치 상세 | 로그인 |
-| Batch | PUT | `/batches/{batchId}/detail` | 배치 통합 저장 | 로그인 |
+| Batch | PUT | `/batches/{batchId}/detail` | 배치 상세 저장 | 로그인 |
 | Batch | GET | `/batches/options` | 비교배치 옵션 | 로그인 |
 | Batch | POST | `/batches/{batchId}/files` | 배치 파일 업로드 | 로그인 |
 | Sampling | GET | `/batches/{batchId}/sampling` | 샘플링 조회 | 로그인 |

@@ -424,8 +424,6 @@ def update_batch_detail(
                 reg_id=member.member_id,
             )
         )
-    if payload.samplingRows:
-        _replace_sampling(db, batch_id, payload.samplingRows, member.member_id)
     db.commit()
     return {"batchId": batch_id, "message": "배치정보가 저장되었습니다."}
 

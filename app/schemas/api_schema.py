@@ -1,4 +1,5 @@
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -81,3 +82,11 @@ class CalculationRunRequest(BaseModel):
 class CalcSampleSaveRequest(BaseModel):
     sample_id: int
     upd_id: str | None = None
+
+
+class ResultPdfDownloadRequest(BaseModel):
+    scope: Literal["selected", "all"] = "selected"
+    batch_ids: list[str] = Field(default_factory=list)
+    plan_id: str | None = None
+    batch_id: str | None = None
+    purpose: str | None = None
