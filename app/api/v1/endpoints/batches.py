@@ -714,7 +714,11 @@ def _file_response(record: TbBatchFile) -> dict:
 
 def _replace_sampling(db: DbSession, batch_id: str, rows: list, member_id: str) -> None:
     batch = db.get(TbBatch, batch_id)
+    calc_sampling_time = None
     if batch is not None:
+        calc_sample = db.get(TbSampling, batch.calc_sample_id) if batch.calc_sample_id else None
+        if calc_sample is not None and calc_sample.batch_id == batch_id:
+            calc_sampling_time = calc_sample.sampling_time
         batch.calc_sample_id = None
     sample_ids = db.scalars(select(TbSampling.sample_id).where(TbSampling.batch_id == batch_id)).all()
     _clear_compare_sampling_refs(db, sample_ids)
@@ -722,28 +726,37 @@ def _replace_sampling(db: DbSession, batch_id: str, rows: list, member_id: str) 
     db.execute(delete(TbCalcSummary).where(TbCalcSummary.batch_id == batch_id))
     db.execute(delete(TbSampling).where(TbSampling.batch_id == batch_id))
     now = datetime.now()
+    inserted_samples: list[TbSampling] = []
     for row in rows:
-        db.add(
-            TbSampling(
-                batch_id=batch_id,
-                sampling_time=row.samplingTime,
-                od=row.od,
-                feed_weight=row.feedWeight,
-                broth_volume=row.brothVolume,
-                target_prod_conc=row.targetProdConc,
-                glucose_conc=row.glucoseConc,
-                lycopene=row.lycopene,
-                a_carotene=row.aCarotene,
-                b_carotene=row.bCarotene,
-                citric_acid=row.citricAcid,
-                pyruvic_acid=row.pyruvicAcid,
-                succinic_acid=row.succinicAcid,
-                lactic_acid=row.lacticAcid,
-                acetic_acid=row.aceticAcid,
-                reg_dt=now,
-                upd_id=member_id,
-            )
+        sample = TbSampling(
+            batch_id=batch_id,
+            sampling_time=row.samplingTime,
+            od=row.od,
+            feed_weight=row.feedWeight,
+            broth_volume=row.brothVolume,
+            target_prod_conc=row.targetProdConc,
+            glucose_conc=row.glucoseConc,
+            lycopene=row.lycopene,
+            a_carotene=row.aCarotene,
+            b_carotene=row.bCarotene,
+            citric_acid=row.citricAcid,
+            pyruvic_acid=row.pyruvicAcid,
+            succinic_acid=row.succinicAcid,
+            lactic_acid=row.lacticAcid,
+            acetic_acid=row.aceticAcid,
+            reg_dt=now,
+            upd_id=member_id,
         )
+        inserted_samples.append(sample)
+        db.add(sample)
+    if batch is not None and calc_sampling_time is not None:
+        db.flush()
+        matched_sample = next(
+            (sample for sample in inserted_samples if sample.sampling_time == calc_sampling_time),
+            None,
+        )
+        if matched_sample is not None:
+            batch.calc_sample_id = matched_sample.sample_id
 
 
 def _sampling_response(row: TbSampling, calc_sample_id: int | None = None) -> dict:
