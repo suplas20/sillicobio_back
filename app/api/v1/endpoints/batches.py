@@ -322,7 +322,26 @@ def update_calc_sample(
     db: DbSession,
     member: CurrentMember,
 ) -> dict:
-    return save_calc_sample(db, batch_id, payload.sample_id, member.member_id)
+    response = save_calc_sample(db, batch_id, payload.sample_id, member.member_id)
+    sample = db.get(TbSampling, payload.sample_id)
+    response["calcSample"] = _sampling_response(sample, payload.sample_id) if sample else None
+    return response
+
+
+@router.get("/{batch_id}/calc-sample")
+def get_calc_sample(batch_id: str, db: DbSession, _: CurrentMember) -> dict:
+    batch = db.get(TbBatch, batch_id)
+    if batch is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    sample = db.get(TbSampling, batch.calc_sample_id) if batch.calc_sample_id else None
+    if sample is not None and sample.batch_id != batch_id:
+        sample = None
+    return {
+        "batchId": batch.batch_id,
+        "calcSampleId": batch.calc_sample_id if sample else None,
+        "hasCalcSample": sample is not None,
+        "calcSample": _sampling_response(sample, batch.calc_sample_id) if sample else None,
+    }
 
 
 @router.post("/{batch_id}/calculation/run")
@@ -413,12 +432,18 @@ def update_batch_detail(
 
 @router.get("/{batch_id}/sampling")
 def get_sampling(batch_id: str, db: DbSession, _: CurrentMember) -> dict:
-    if db.get(TbBatch, batch_id) is None:
+    batch = db.get(TbBatch, batch_id)
+    if batch is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     rows = db.scalars(
         select(TbSampling).where(TbSampling.batch_id == batch_id).order_by(TbSampling.sampling_time)
     ).all()
-    return {"batchId": batch_id, "columns": SAMPLING_COLUMNS, "rows": [_sampling_response(row) for row in rows]}
+    return {
+        "batchId": batch_id,
+        "calcSampleId": batch.calc_sample_id,
+        "columns": SAMPLING_COLUMNS,
+        "rows": [_sampling_response(row, batch.calc_sample_id) for row in rows],
+    }
 
 
 @router.put("/{batch_id}/sampling")
@@ -721,9 +746,10 @@ def _replace_sampling(db: DbSession, batch_id: str, rows: list, member_id: str) 
         )
 
 
-def _sampling_response(row: TbSampling) -> dict:
+def _sampling_response(row: TbSampling, calc_sample_id: int | None = None) -> dict:
     return {
         "id": row.sample_id,
+        "isCalcSample": row.sample_id == calc_sample_id,
         "samplingTime": number(row.sampling_time),
         "od": number(row.od),
         "feedWeight": number(row.feed_weight),
