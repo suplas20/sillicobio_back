@@ -6,7 +6,6 @@ Create Date: 2026-06-15 00:00:00.000000
 """
 
 from alembic import op
-import sqlalchemy as sa
 
 
 revision = "20260615_0001"
@@ -16,20 +15,23 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "tb_best_batch",
-        sa.Column("best_batch_id", sa.BigInteger(), autoincrement=True, nullable=False),
-        sa.Column("exp_id", sa.String(length=20), nullable=False),
-        sa.Column("batch_id", sa.String(length=40), nullable=False),
-        sa.Column("sort_ord", sa.Integer(), nullable=True),
-        sa.Column("reg_id", sa.String(length=20), nullable=True),
-        sa.Column("reg_dt", sa.DateTime(), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
-        sa.Column("upd_id", sa.String(length=20), nullable=True),
-        sa.Column("upd_dt", sa.DateTime(), nullable=True),
-        sa.ForeignKeyConstraint(["batch_id"], ["tb_batch.batch_id"], name="fk_tb_best_batch_batch"),
-        sa.ForeignKeyConstraint(["reg_id"], ["tb_member.member_id"]),
-        sa.ForeignKeyConstraint(["upd_id"], ["tb_member.member_id"]),
-        sa.PrimaryKeyConstraint("best_batch_id"),
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tb_best_batch (
+            best_batch_id bigserial PRIMARY KEY,
+            exp_id varchar(20) NOT NULL,
+            batch_id varchar(40) NOT NULL,
+            sort_ord integer,
+            reg_id varchar(20),
+            reg_dt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            upd_id varchar(20),
+            upd_dt timestamp,
+            CONSTRAINT fk_tb_best_batch_batch
+                FOREIGN KEY (batch_id) REFERENCES tb_batch(batch_id),
+            FOREIGN KEY (reg_id) REFERENCES tb_member(member_id),
+            FOREIGN KEY (upd_id) REFERENCES tb_member(member_id)
+        )
+        """
     )
     op.execute(
         "COMMENT ON TABLE tb_best_batch IS "

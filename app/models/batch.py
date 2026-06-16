@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import CHAR, Computed, Date, DateTime, ForeignKey, Numeric, String, UniqueConstraint
+from sqlalchemy import CHAR, BigInteger, Computed, Date, DateTime, ForeignKey, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
@@ -30,3 +30,4 @@ class TbBatch(Base):
     reg_dt: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     upd_dt: Mapped[datetime | None] = mapped_column(DateTime)
     upd_id: Mapped[str | None] = mapped_column(String(20), ForeignKey("tb_member.member_id"))
+    calc_sample_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("tb_sampling.sample_id"))

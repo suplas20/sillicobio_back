@@ -4,7 +4,8 @@ from shutil import copyfileobj
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import case, delete, func, select
+from sqlalchemy import bindparam, case, delete, func, select, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.deps import CurrentMember, DbSession
 from app.core.config import settings
@@ -17,7 +18,20 @@ from app.models.calc_full import TbCalcFull
 from app.models.calc_summary import TbCalcSummary
 from app.models.experiment import TbExpPlan
 from app.models.researcher import TbResearcher
-from app.schemas.api_schema import BatchDetailSaveRequest, CompareBatchSaveRequest, SamplingSaveRequest
+from app.schemas.api_schema import (
+    BatchDetailSaveRequest,
+    CalcSampleSaveRequest,
+    CalculationRunRequest,
+    CompareBatchSaveRequest,
+    SamplingSaveRequest,
+)
+from app.services.calculation_service import (
+    build_compare_meta_for_full_records,
+    get_calculation,
+    get_calculation_status,
+    run_calculation,
+    save_calc_sample,
+)
 from app.utils.formatters import number, yyyymmdd
 
 
@@ -268,6 +282,8 @@ def save_compare_batch(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     if db.get(TbBatch, payload.cmp_batch_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    if payload.cmp_batch_id == batch_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="자기 배치는 비교배치로 선택할 수 없습니다.")
 
     batch.cmp_type = "BATCH"
     batch.cmp_batch_id = payload.cmp_batch_id
@@ -289,13 +305,50 @@ def get_compare_batch(batch_id: str, db: DbSession, _: CurrentMember) -> dict:
     batch = db.get(TbBatch, batch_id)
     if batch is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    cmp_batch = db.get(TbBatch, batch.cmp_batch_id) if batch.cmp_batch_id else None
+    cmp_batch_id = _batch_compare_batch_id(db, batch)
+    cmp_batch = db.get(TbBatch, cmp_batch_id) if cmp_batch_id else None
     return {
         "batch_id": batch.batch_id,
         "cmp_type": batch.cmp_type,
-        "cmp_batch_id": batch.cmp_batch_id,
+        "cmp_batch_id": cmp_batch_id,
         "cmp_batch_name": cmp_batch.batch_id if cmp_batch else None,
     }
+
+
+@router.put("/{batch_id}/calc-sample")
+def update_calc_sample(
+    batch_id: str,
+    payload: CalcSampleSaveRequest,
+    db: DbSession,
+    member: CurrentMember,
+) -> dict:
+    return save_calc_sample(db, batch_id, payload.sample_id, member.member_id)
+
+
+@router.post("/{batch_id}/calculation/run")
+def run_batch_calculation(
+    batch_id: str,
+    payload: CalculationRunRequest,
+    db: DbSession,
+    _: CurrentMember,
+) -> dict:
+    return run_calculation(db, batch_id, payload.recalculate)
+
+
+@router.get("/{batch_id}/calculation")
+def get_batch_calculation(
+    batch_id: str,
+    db: DbSession,
+    _: CurrentMember,
+    include_full: bool = True,
+    include_summary: bool = True,
+) -> dict:
+    return get_calculation(db, batch_id, include_full, include_summary)
+
+
+@router.get("/{batch_id}/calculation/status")
+def get_batch_calculation_status(batch_id: str, db: DbSession, _: CurrentMember) -> dict:
+    return get_calculation_status(db, batch_id)
 
 
 @router.get("/{batch_id}")
@@ -326,6 +379,8 @@ def update_batch_detail(
     batch = db.get(TbBatch, batch_id)
     if batch is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    if payload.comparison.targetBatchId and payload.comparison.targetBatchId == batch_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="자기 배치는 비교배치로 선택할 수 없습니다.")
     if payload.startDt:
         batch.start_dt = _parse_date(payload.startDt, "startDt").date()
     batch.prep_time = payload.params.prepTime
@@ -377,8 +432,12 @@ def save_sampling(batch_id: str, payload: SamplingSaveRequest, db: DbSession, me
 
 @router.delete("/{batch_id}/sampling", status_code=status.HTTP_204_NO_CONTENT)
 def delete_sampling(batch_id: str, db: DbSession, _: CurrentMember) -> None:
-    if db.get(TbBatch, batch_id) is None:
+    batch = db.get(TbBatch, batch_id)
+    if batch is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    batch.calc_sample_id = None
+    sample_ids = db.scalars(select(TbSampling.sample_id).where(TbSampling.batch_id == batch_id)).all()
+    _clear_compare_sampling_refs(db, sample_ids)
     db.execute(delete(TbCalcFull).where(TbCalcFull.batch_id == batch_id))
     db.execute(delete(TbCalcSummary).where(TbCalcSummary.batch_id == batch_id))
     db.execute(delete(TbSampling).where(TbSampling.batch_id == batch_id))
@@ -390,6 +449,10 @@ def delete_sampling_row(batch_id: str, sample_id: int, db: DbSession, _: Current
     row = db.get(TbSampling, sample_id)
     if row is None or row.batch_id != batch_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    batch = db.get(TbBatch, batch_id)
+    if batch and batch.calc_sample_id == sample_id:
+        batch.calc_sample_id = None
+    _clear_compare_sampling_refs(db, [sample_id])
     db.execute(delete(TbCalcFull).where(TbCalcFull.sample_id == sample_id))
     db.execute(delete(TbCalcSummary).where(TbCalcSummary.batch_id == batch_id))
     db.delete(row)
@@ -398,14 +461,47 @@ def delete_sampling_row(batch_id: str, sample_id: int, db: DbSession, _: Current
 
 @router.get("/{batch_id}/calc")
 def get_calc(batch_id: str, db: DbSession, _: CurrentMember) -> dict:
-    if db.get(TbBatch, batch_id) is None:
+    batch = db.get(TbBatch, batch_id)
+    if batch is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     full = db.scalars(select(TbCalcFull).where(TbCalcFull.batch_id == batch_id).order_by(TbCalcFull.age)).all()
+    compare_meta_by_calc_id = build_compare_meta_for_full_records(
+        db,
+        batch_id,
+        full,
+    )
+    sampling_time_by_sample_id = _calc_sampling_time_by_sample_id(
+        db,
+        [row.sample_id for row in full if row.sample_id is not None],
+    )
     summary = db.get(TbCalcSummary, batch_id)
+    summary_has_compare = any(
+        row.sample_id == batch.calc_sample_id and row.calc_id in compare_meta_by_calc_id
+        for row in full
+    )
     return {
         "batchId": batch_id,
-        "full": [_calc_full_response(row) for row in full],
-        "summary": _calc_summary_response(summary) if summary else {},
+        "full": [
+            _calc_full_response(
+                row,
+                compare_meta_by_calc_id.get(row.calc_id, {}),
+                sampling_time_by_sample_id.get(row.sample_id),
+                row.calc_id in compare_meta_by_calc_id,
+            )
+            for row in full
+        ],
+        "summary": _calc_summary_response(
+            summary,
+            summary_has_compare,
+            next(
+                (
+                    compare_meta_by_calc_id[row.calc_id]
+                    for row in full
+                    if row.sample_id == batch.calc_sample_id and row.calc_id in compare_meta_by_calc_id
+                ),
+                {},
+            ),
+        ) if summary else {},
     }
 
 
@@ -535,7 +631,8 @@ def _batch_detail_response(db: DbSession, batch: TbBatch) -> dict:
             "feedDensity": number(batch.feed_density),
             "feedGlucosePerFeed": number(batch.feed_glucose_per_feed),
         },
-        "comparison": {"type": batch.cmp_type, "targetBatchId": batch.cmp_batch_id},
+        "comparison": {"type": batch.cmp_type, "targetBatchId": _batch_compare_batch_id(db, batch)},
+        "calcSampleId": batch.calc_sample_id,
         "researchers": _batch_researchers(db, batch.batch_id),
         "files": _batch_files(db, batch.batch_id),
     }
@@ -591,6 +688,13 @@ def _file_response(record: TbBatchFile) -> dict:
 
 
 def _replace_sampling(db: DbSession, batch_id: str, rows: list, member_id: str) -> None:
+    batch = db.get(TbBatch, batch_id)
+    if batch is not None:
+        batch.calc_sample_id = None
+    sample_ids = db.scalars(select(TbSampling.sample_id).where(TbSampling.batch_id == batch_id)).all()
+    _clear_compare_sampling_refs(db, sample_ids)
+    db.execute(delete(TbCalcFull).where(TbCalcFull.batch_id == batch_id))
+    db.execute(delete(TbCalcSummary).where(TbCalcSummary.batch_id == batch_id))
     db.execute(delete(TbSampling).where(TbSampling.batch_id == batch_id))
     now = datetime.now()
     for row in rows:
@@ -637,12 +741,126 @@ def _sampling_response(row: TbSampling) -> dict:
     }
 
 
-def _calc_full_response(row: TbCalcFull) -> dict:
-    return {column.name: _serialize(getattr(row, column.name)) for column in TbCalcFull.__table__.columns if column.name != "batch_id"}
+def _calc_full_response(row: TbCalcFull, compare_meta: dict | None = None, sampling_time=None, include_compare: bool = True) -> dict:
+    data = {column.name: _serialize(getattr(row, column.name)) for column in TbCalcFull.__table__.columns if column.name != "batch_id"}
+    data["base_sample_id"] = row.sample_id
+    data["base_sampling_time"] = _serialize(sampling_time)
+    data["sampling_time"] = _serialize(sampling_time)
+    compare_meta = compare_meta or {}
+    if not include_compare:
+        data["abs_yield_up"] = None
+        data["prod_up"] = None
+        data["compare_batch_id"] = None
+        data["compare_sample_id"] = None
+        data["compare_age"] = None
+        data["compare_sampling_time"] = None
+        data["compare_time_diff"] = None
+        data["matched_batch_id"] = None
+        data["matched_sample_id"] = None
+        data["matched_sampling_time"] = None
+        return data
+    data["compare_batch_id"] = compare_meta.get("compare_batch_id")
+    data["compare_sample_id"] = compare_meta.get("compare_sample_id")
+    data["compare_age"] = _serialize(compare_meta.get("compare_age"))
+    data["compare_sampling_time"] = _serialize(compare_meta.get("compare_sampling_time"))
+    data["compare_time_diff"] = _serialize(compare_meta.get("compare_time_diff"))
+    data["matched_batch_id"] = compare_meta.get("matched_batch_id")
+    data["matched_sample_id"] = compare_meta.get("matched_sample_id")
+    data["matched_sampling_time"] = _serialize(compare_meta.get("matched_sampling_time"))
+    data["abs_yield_up"] = _serialize(compare_meta.get("abs_yield_up"))
+    data["prod_up"] = _serialize(compare_meta.get("prod_up"))
+    return data
 
 
-def _calc_summary_response(row: TbCalcSummary) -> dict:
-    return {column.name: _serialize(getattr(row, column.name)) for column in TbCalcSummary.__table__.columns if column.name != "batch_id"}
+def _calc_summary_response(row: TbCalcSummary, include_compare: bool = True, compare_meta: dict | None = None) -> dict:
+    data = {column.name: _serialize(getattr(row, column.name)) for column in TbCalcSummary.__table__.columns if column.name != "batch_id"}
+    if not include_compare:
+        data["abs_yield_up"] = None
+        data["prod_up"] = None
+    else:
+        compare_meta = compare_meta or {}
+        data["abs_yield_up"] = _serialize(compare_meta.get("abs_yield_up"))
+        data["prod_up"] = _serialize(compare_meta.get("prod_up"))
+    return data
+
+
+def _clear_compare_sampling_refs(db: DbSession, sample_ids: list[int]) -> None:
+    if not sample_ids or not _has_calc_full_compare_columns(db):
+        return
+    stmt = text(
+        """
+        UPDATE tb_calc_full
+        SET compare_sample_id = NULL,
+            compare_age = NULL,
+            compare_time_diff = NULL,
+            abs_yield_up = NULL,
+            prod_up = NULL
+        WHERE compare_sample_id IN :sample_ids
+        """
+    ).bindparams(bindparam("sample_ids", expanding=True))
+    db.execute(stmt, {"sample_ids": sample_ids})
+
+
+def _calc_sampling_time_by_sample_id(db: DbSession, sample_ids: list[int]) -> dict[int, object]:
+    if not sample_ids:
+        return {}
+    stmt = select(TbSampling.sample_id, TbSampling.sampling_time).where(TbSampling.sample_id.in_(sample_ids))
+    return {sample_id: sampling_time for sample_id, sampling_time in db.execute(stmt).all()}
+
+
+def _batch_compare_batch_id(db: DbSession, batch: TbBatch) -> str | None:
+    compare_batch_id = batch.cmp_batch_id
+    if not compare_batch_id:
+        plan = db.get(TbExpPlan, batch.exp_id)
+        compare_batch_id = plan.cmp_batch_id if plan else None
+    if not compare_batch_id or compare_batch_id == batch.batch_id:
+        return None
+    if _batch_has_samplings(db, compare_batch_id):
+        return compare_batch_id
+    compare_batch = db.get(TbBatch, compare_batch_id)
+    if compare_batch is None:
+        return None
+    return _first_sampled_batch_in_experiment(db, compare_batch.exp_id, batch.batch_id)
+
+
+def _batch_has_samplings(db: DbSession, batch_id: str) -> bool:
+    return bool(db.scalar(select(TbSampling.sample_id).where(TbSampling.batch_id == batch_id).limit(1)))
+
+
+def _first_sampled_batch_in_experiment(db: DbSession, exp_id: str, current_batch_id: str) -> str | None:
+    return db.scalar(
+        select(TbBatch.batch_id)
+        .join(TbSampling, TbSampling.batch_id == TbBatch.batch_id)
+        .where(TbBatch.exp_id == exp_id, TbBatch.batch_id != current_batch_id)
+        .group_by(TbBatch.batch_id, TbBatch.batch_no)
+        .order_by(TbBatch.batch_no, TbBatch.batch_id)
+        .limit(1)
+    )
+
+
+def _has_calc_full_compare_columns(db: DbSession) -> bool:
+    try:
+        dialect = db.get_bind().dialect.name
+        if dialect == "sqlite":
+            rows = db.execute(text("PRAGMA table_info(tb_calc_full)")).mappings().all()
+            columns = {row["name"] for row in rows}
+        else:
+            columns = set(
+                db.scalars(
+                    text(
+                        """
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_schema = 'public'
+                          AND table_name = 'tb_calc_full'
+                          AND column_name IN ('compare_sample_id', 'compare_age', 'compare_time_diff')
+                        """
+                    )
+                ).all()
+            )
+        return {"compare_sample_id", "compare_age", "compare_time_diff"}.issubset(columns)
+    except SQLAlchemyError:
+        return False
 
 
 def _serialize(value):

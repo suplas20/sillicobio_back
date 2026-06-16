@@ -71,3 +71,13 @@ class BestBatchCreateRequest(BaseModel):
 class CompareBatchSaveRequest(BaseModel):
     cmp_batch_id: str
     upd_id: str | None = None
+
+
+class CalculationRunRequest(BaseModel):
+    recalculate: bool = True
+    reg_id: str | None = None
+
+
+class CalcSampleSaveRequest(BaseModel):
+    sample_id: int
+    upd_id: str | None = None
