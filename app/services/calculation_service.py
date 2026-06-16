@@ -263,7 +263,7 @@ def _calculate_full_rows(batch: TbBatch, samplings: list[TbSampling]) -> list[di
     for sample in samplings:
         consumed = None
         if feed_weight_0 is not None and sample.feed_weight is not None and r is not None:
-            consumed = (sample.feed_weight - feed_weight_0) * r
+            consumed = (feed_weight_0 - sample.feed_weight) * r
         consumed_values.append(consumed)
 
         dcw = sample.od * batch.dcw_od_factor if sample.od is not None and batch.dcw_od_factor is not None else None

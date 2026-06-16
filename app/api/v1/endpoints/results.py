@@ -1,4 +1,3 @@
-from datetime import datetime
 from io import BytesIO
 from urllib.parse import quote
 
@@ -11,7 +10,7 @@ from app.api.v1.endpoints.batches import get_calc_view
 from app.models.batch import TbBatch
 from app.models.experiment import TbExpPlan
 from app.schemas.api_schema import ResultPdfDownloadRequest
-from app.services.pdf_service import create_results_pdf_zip
+from app.services.pdf_service import create_result_pdf
 from app.utils.formatters import yyyymmdd
 
 
@@ -68,17 +67,38 @@ def get_experiment_results(experiment_id: str, db: DbSession, member: CurrentMem
 def download_result_pdfs(
     payload: ResultPdfDownloadRequest,
     db: DbSession,
-    member: CurrentMember,
-) -> StreamingResponse:
+    _: CurrentMember,
+) -> dict:
     batch_ids = _pdf_batch_ids(db, payload)
     if not batch_ids:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="PDF로 다운로드할 배치가 없습니다.")
-    views = [get_calc_view(batch_id, db, member) for batch_id in batch_ids]
-    zip_bytes = create_results_pdf_zip(views)
-    filename = f"batch_result_pdfs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+    return {
+        "count": len(batch_ids),
+        "items": [
+            {
+                "batchId": batch_id,
+                "fileName": f"{batch_id}.pdf",
+                "downloadUrl": f"/api/v1/results/{batch_id}/pdf-download",
+            }
+            for batch_id in batch_ids
+        ],
+    }
+
+
+@router.get("/{batch_id}/pdf-download")
+def download_result_pdf(
+    batch_id: str,
+    db: DbSession,
+    member: CurrentMember,
+) -> StreamingResponse:
+    if db.get(TbBatch, batch_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    view = get_calc_view(batch_id, db, member)
+    pdf_bytes = create_result_pdf(view)
+    filename = f"{batch_id}.pdf"
     return StreamingResponse(
-        BytesIO(zip_bytes),
-        media_type="application/zip",
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
     )
 

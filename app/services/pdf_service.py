@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from io import BytesIO
-from zipfile import ZIP_DEFLATED, ZipFile
 
 
 PAGE_WIDTH = 595
@@ -14,15 +13,6 @@ DEFAULT_SIZE = 9
 TITLE_SIZE = 15
 SECTION_SIZE = 12
 LINE_GAP = 4
-
-
-def create_results_pdf_zip(batch_views: list[dict]) -> bytes:
-    archive = BytesIO()
-    with ZipFile(archive, "w", ZIP_DEFLATED) as zip_file:
-        for view in batch_views:
-            batch_id = view.get("batch", {}).get("batchId") or "batch"
-            zip_file.writestr(f"{_safe_filename(batch_id)}.pdf", create_result_pdf(view))
-    return archive.getvalue()
 
 
 def create_result_pdf(view: dict) -> bytes:
