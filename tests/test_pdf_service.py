@@ -15,4 +15,5 @@ class PdfServiceTest(unittest.TestCase):
 
         pdf_bytes = create_result_pdf(data)
 
-        self.assertTrue(pdf_bytes.startswith(b"%PDF-1.4"))
+        self.assertTrue(pdf_bytes.startswith(b"%PDF-"))
+        self.assertGreater(len(pdf_bytes), 1000)

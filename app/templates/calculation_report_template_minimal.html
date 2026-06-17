@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>산출 확인 보고서</title>
+  <style>
+    @page { size: A3 landscape; margin: 10mm; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Pretendard", "Noto Sans CJK KR", "Malgun Gothic", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #0F2F43;
+      background: #fff;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .page { padding: 8px 4px 0; background: #fff; }
+    .report-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 22px;
+      padding-bottom: 14px;
+      border-bottom: 2px solid #15B8B0;
+    }
+    .report-title {
+      margin: 0;
+      flex: 0 0 auto;
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      color: #0F2F43;
+      white-space: nowrap;
+      word-break: keep-all;
+    }
+    .batch-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      background: #E6FAF7;
+      color: #15B8B0;
+      font-size: 13px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .header-meta {
+      margin-left: auto;
+      color: #64748B;
+      font-size: 11px;
+      font-weight: 700;
+      text-align: right;
+    }
+    .section {
+      margin-bottom: 18px;
+      padding: 16px 18px;
+      border: 1px solid #E5E7EB;
+      border-radius: 10px;
+      page-break-inside: avoid;
+      background: #fff;
+    }
+    .section.breakable { page-break-inside: auto; }
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+      padding-bottom: 11px;
+      border-bottom: 1px solid #E5E7EB;
+      color: #0F2F43;
+      font-size: 14px;
+      font-weight: 900;
+    }
+    .section-dot {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #15B8B0;
+      flex-shrink: 0;
+    }
+    .count-text {
+      margin-left: 8px;
+      color: #7C8A96;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .count-text b { color: #15B8B0; }
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      overflow: hidden;
+      border: 1px solid #E5E7EB;
+      border-radius: 8px;
+      background: #E5E7EB;
+    }
+    .info-cell {
+      min-height: 54px;
+      padding: 12px 14px;
+      background: #fff;
+    }
+    .info-key {
+      margin-bottom: 5px;
+      color: #7C8A96;
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1.3;
+    }
+    .info-value {
+      color: #0F2F43;
+      font-size: 13px;
+      font-weight: 800;
+      word-break: break-word;
+    }
+    .table-wrap {
+      overflow: hidden;
+      border: 1px solid #E5E7EB;
+      border-radius: 8px;
+      background: #fff;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: auto;
+      font-size: 11px;
+    }
+    thead { display: table-header-group; }
+    tr { page-break-inside: avoid; }
+    th {
+      padding: 9px 8px;
+      border-right: 1px solid rgba(255, 255, 255, 0.28);
+      background: #15B8B0;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 900;
+      text-align: center;
+      white-space: nowrap;
+    }
+    th:last-child { border-right: none; }
+    th.col-by { background: #0E948F; }
+    th.col-oa { background: #64748B; }
+    td {
+      padding: 8px 8px;
+      border-right: 1px solid #EEF1F0;
+      border-bottom: 1px solid #E5E7EB;
+      color: #334155;
+      font-size: 11px;
+      font-weight: 700;
+      text-align: center;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    td:last-child { border-right: none; }
+    tbody tr:last-child td { border-bottom: none; }
+    td.left { text-align: left; white-space: normal; }
+    td.col-by { background: rgba(21, 184, 176, .06); }
+    td.col-oa { background: rgba(201, 132, 43, .07); }
+    .calc-selected td { background: #E6FAF7; }
+    .calc-selected td.col-by { background: #DDF8F3; }
+    .calc-selected td.col-oa { background: #F6EFE4; }
+    .badge-selected {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: #15B8B0;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 900;
+      line-height: 1.4;
+    }
+    .na { color: #94A3B8; font-style: italic; font-weight: 700; }
+    .note {
+      margin-top: 9px;
+      color: #7C8A96;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.7;
+    }
+    .summary-table th, .summary-table td { font-size: 11px; padding: 8px 7px; }
+    .footer {
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1px solid #E5E7EB;
+      color: #94A3B8;
+      font-size: 10px;
+      font-weight: 700;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+{% macro val(v) -%}
+  {%- if v is undefined or v is none or v == '' -%}
+    <span class="na">—</span>
+  {%- else -%}
+    {{ v }}
+  {%- endif -%}
+{%- endmacro %}
+  <div class="page">
+    <header class="report-header">
+      <h1 class="report-title">산출 확인</h1>
+      <span class="batch-badge">{{ val(batch_id) }}</span>
+      <div class="header-meta">
+        {% if generated_at is defined and generated_at %}PDF 생성일시: {{ generated_at }}{% endif %}
+      </div>
+    </header>
+
+    <section class="section">
+      <div class="section-title">
+        <span class="section-dot"></span>참여 연구원
+        <span class="count-text">건수 <b>{{ researchers|length if researchers is defined and researchers else 0 }}</b>명</span>
+      </div>
+      <div class="info-grid">
+        {% if researchers is defined and researchers %}
+          {% for researcher in researchers %}
+            <div class="info-cell">
+              <div class="info-key">연구원 {{ loop.index }}</div>
+              <div class="info-value">
+                {{ val(researcher.name) }}
+                {% if researcher.researcher_id is defined and researcher.researcher_id %}({{ researcher.researcher_id }}){% endif %}
+                {% if researcher.role is defined and researcher.role %} / {{ researcher.role }}{% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        {% else %}
+          <div class="info-cell">
+            <div class="info-key">참여 연구원</div>
+            <div class="info-value"><span class="na">—</span></div>
+          </div>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="section breakable">
+      <div class="section-title">
+        <span class="section-dot"></span>샘플링 데이터
+        <span class="count-text">건수 <b>{{ sampling_items|length if sampling_items is defined and sampling_items else 0 }}</b>개</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>기준</th><th>Sampling time (hr)</th><th>OD</th><th>Feed weight (g)</th><th>Broth volume (L)</th><th>Target product conc. (g/L)</th><th>Glucose conc. (g/L)</th><th>Lycopene (g/L)</th><th>α-carotene (g/L)</th><th>β-carotene (g/L)</th><th>Citric acid (g/L)</th><th>Pyruvic acid (g/L)</th><th>Succinic acid (g/L)</th><th>Lactic acid (g/L)</th><th>Acetic acid (g/L)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if sampling_items is defined and sampling_items %}
+              {% for row in sampling_items %}
+                <tr class="{% if row.is_calc_sample is defined and row.is_calc_sample %}calc-selected{% endif %}">
+                  <td>{% if row.is_calc_sample is defined and row.is_calc_sample %}<span class="badge-selected">선택</span>{% else %}<span class="na">—</span>{% endif %}</td>
+                  <td>{{ val(row.sampling_time) }}</td><td>{{ val(row.od) }}</td><td>{{ val(row.feed_weight) }}</td><td>{{ val(row.broth_volume) }}</td><td>{{ val(row.target_prod_conc) }}</td><td>{{ val(row.glucose_conc) }}</td><td>{{ val(row.lycopene) }}</td><td>{{ val(row.a_carotene) }}</td><td>{{ val(row.b_carotene) }}</td><td>{{ val(row.citric_acid) }}</td><td>{{ val(row.pyruvic_acid) }}</td><td>{{ val(row.succinic_acid) }}</td><td>{{ val(row.lactic_acid) }}</td><td>{{ val(row.acetic_acid) }}</td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr><td colspan="15"><span class="na">샘플링 데이터가 없습니다.</span></td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section breakable">
+      <div class="section-title">
+        <span class="section-dot"></span>산출 전체
+        <span class="count-text">건수 <b>{{ calc_full|length if calc_full is defined and calc_full else 0 }}</b>개</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Sampling time (hr)</th><th>비교배치 Sampling time (hr)</th><th>Lutein</th><th>Max Lutein</th><th>Yield</th><th>생산성</th><th>생산량</th><th>전환수율①</th><th>생산성①</th><th>TS</th><th>O/I</th><th>SCR</th><th>SSCR</th><th>Yx/s</th><th>Current OD</th><th>Max. OD</th><th>ΔOD</th><th class="col-by">Lycopene</th><th class="col-by">α-carotene</th><th class="col-by">β-carotene</th><th class="col-oa">Citric</th><th class="col-oa">Pyruvic</th><th class="col-oa">Succinic</th><th class="col-oa">Lactic</th><th class="col-oa">Acetic</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if calc_full is defined and calc_full %}
+              {% for row in calc_full %}
+                <tr>
+                  <td>{{ val(row.age) }}</td><td>{{ val(row.compare_age) }}</td><td>{{ val(row.lutein) }}</td><td>{{ val(row.max_lutein) }}</td><td>{{ val(row.yield_pct) }}</td><td>{{ val(row.productivity) }}</td><td>{{ val(row.production) }}</td><td>{{ val(row.abs_yield_up) }}</td><td>{{ val(row.prod_up) }}</td><td>{{ val(row.ts) }}</td><td>{{ val(row.o_i) }}</td><td>{{ val(row.scr) }}</td><td>{{ val(row.sscr) }}</td><td>{{ val(row.yx_s) }}</td><td>{{ val(row.current_od) }}</td><td>{{ val(row.max_od) }}</td><td>{{ val(row.delta_od) }}</td><td class="col-by">{{ val(row.lycopene) }}</td><td class="col-by">{{ val(row.a_carotene) }}</td><td class="col-by">{{ val(row.b_carotene) }}</td><td class="col-oa">{{ val(row.citric_acid) }}</td><td class="col-oa">{{ val(row.pyruvic_acid) }}</td><td class="col-oa">{{ val(row.succinic_acid) }}</td><td class="col-oa">{{ val(row.lactic_acid) }}</td><td class="col-oa">{{ val(row.acetic_acid) }}</td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr><td colspan="25"><span class="na">산출 전체 데이터가 없습니다.</span></td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+      <p class="note">sampling time별로 계산한 산출 결과입니다.<br />※ 전환수율①·생산성①은 비교배치 선택 시 산출되며, 비교배치의 1시간 내 샘플링 데이터가 없으면 빈칸으로 표시됩니다.</p>
+    </section>
+
+    <section class="section">
+      <div class="section-title"><span class="section-dot"></span>산출 요약</div>
+      <div class="table-wrap">
+        <table class="summary-table">
+          <thead>
+            <tr>
+              <th>Sampling time (hr)</th><th>비교배치 Sampling time (hr)</th><th>Lutein</th><th>Max Lutein</th><th>Yield</th><th>생산성</th><th>생산량</th><th>전환수율①</th><th>생산성①</th><th>TS</th><th>O/I</th><th>SCR</th><th>SSCR</th><th>Yx/s</th><th>Current OD</th><th>Max. OD</th><th>ΔOD</th><th class="col-by">Lycopene</th><th class="col-by">α-carotene</th><th class="col-by">β-carotene</th><th class="col-oa">Citric</th><th class="col-oa">Pyruvic</th><th class="col-oa">Succinic</th><th class="col-oa">Lactic</th><th class="col-oa">Acetic</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if calc_summary is defined and calc_summary %}
+              <tr>
+                <td>{{ val(calc_summary.age) }}</td><td>{{ val(calc_summary.compare_age) }}</td><td>{{ val(calc_summary.final_lutein if calc_summary.final_lutein is defined else calc_summary.lutein) }}</td><td>{{ val(calc_summary.max_lutein) }}</td><td>{{ val(calc_summary.yield_pct) }}</td><td>{{ val(calc_summary.productivity) }}</td><td>{{ val(calc_summary.production) }}</td><td>{{ val(calc_summary.abs_yield_up) }}</td><td>{{ val(calc_summary.prod_up) }}</td><td>{{ val(calc_summary.ts) }}</td><td>{{ val(calc_summary.o_i) }}</td><td>{{ val(calc_summary.scr) }}</td><td>{{ val(calc_summary.sscr) }}</td><td>{{ val(calc_summary.yx_s) }}</td><td>{{ val(calc_summary.fn if calc_summary.fn is defined else calc_summary.current_od) }}</td><td>{{ val(calc_summary.max_od) }}</td><td>{{ val(calc_summary.delta_od) }}</td><td class="col-by">{{ val(calc_summary.final_lycopene if calc_summary.final_lycopene is defined else calc_summary.lycopene) }}</td><td class="col-by">{{ val(calc_summary.final_a_carotene if calc_summary.final_a_carotene is defined else calc_summary.a_carotene) }}</td><td class="col-by">{{ val(calc_summary.final_b_carotene if calc_summary.final_b_carotene is defined else calc_summary.b_carotene) }}</td><td class="col-oa">{{ val(calc_summary.final_citric_acid if calc_summary.final_citric_acid is defined else calc_summary.citric_acid) }}</td><td class="col-oa">{{ val(calc_summary.final_pyruvic_acid if calc_summary.final_pyruvic_acid is defined else calc_summary.pyruvic_acid) }}</td><td class="col-oa">{{ val(calc_summary.final_succinic_acid if calc_summary.final_succinic_acid is defined else calc_summary.succinic_acid) }}</td><td class="col-oa">{{ val(calc_summary.final_lactic_acid if calc_summary.final_lactic_acid is defined else calc_summary.lactic_acid) }}</td><td class="col-oa">{{ val(calc_summary.final_acetic_acid if calc_summary.final_acetic_acid is defined else calc_summary.acetic_acid) }}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="25"><span class="na">산출 요약 데이터가 없습니다.</span></td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+      <p class="note">산출 기준으로 선택된 샘플링 시점의 산출 지표입니다.</p>
+    </section>
+
+    <footer class="footer">SillicoBio Fermentation Management System</footer>
+  </div>
+</body>
+</html>
