@@ -102,3 +102,8 @@ docs/
 # Keep collections in git, but create/share sanitized example environments only.
 postman/*environment*.json
 !postman/*.example.json
+
+
+# backup
+/backups/*
+/backup/*
