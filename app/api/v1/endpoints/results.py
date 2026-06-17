@@ -119,7 +119,10 @@ def download_result_pdf(
     if db.get(TbBatch, batch_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     view = get_calc_view(batch_id, db, member)
-    pdf_bytes = create_result_pdf(view)
+    try:
+        pdf_bytes = create_result_pdf(view)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     filename = f"{batch_id}.pdf"
     return StreamingResponse(
         BytesIO(pdf_bytes),

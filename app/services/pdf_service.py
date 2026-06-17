@@ -6,8 +6,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Environment, FileSystemLoader, select_autoescape
-
 
 TEMPLATE_DIR = Path(__file__).resolve().parents[1] / "templates"
 REPORT_TEMPLATE = "calculation_report_template_minimal.html"
@@ -15,15 +13,28 @@ CACHE_DIR = Path(tempfile.gettempdir()) / "sillicobio-font-cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("XDG_CACHE_HOME", str(CACHE_DIR))
 
-from weasyprint import HTML  # noqa: E402
-
 
 def create_result_pdf(view: dict) -> bytes:
     html = _render_result_html(view)
+    try:
+        from weasyprint import HTML
+    except Exception as exc:
+        raise RuntimeError(
+            "PDF 렌더링 의존성이 설치되지 않았거나 서버 OS 라이브러리가 부족합니다. "
+            "`pip install -r requirements.txt` 적용 후 WeasyPrint 시스템 의존성을 확인하세요."
+        ) from exc
     return HTML(string=html, base_url=str(TEMPLATE_DIR)).write_pdf()
 
 
 def _render_result_html(view: dict) -> str:
+    try:
+        from jinja2 import Environment, FileSystemLoader, select_autoescape
+    except Exception as exc:
+        raise RuntimeError(
+            "PDF 템플릿 렌더링 의존성 Jinja2가 설치되지 않았습니다. "
+            "`pip install -r requirements.txt`를 적용하세요."
+        ) from exc
+
     env = Environment(
         loader=FileSystemLoader(TEMPLATE_DIR),
         autoescape=select_autoescape(("html", "xml")),
