@@ -847,32 +847,11 @@ def _calc_sampling_time_by_sample_id(db: DbSession, sample_ids: list[int]) -> di
 
 def _batch_compare_batch_id(db: DbSession, batch: TbBatch) -> str | None:
     compare_batch_id = batch.cmp_batch_id
-    if not compare_batch_id:
-        plan = db.get(TbExpPlan, batch.exp_id)
-        compare_batch_id = plan.cmp_batch_id if plan else None
     if not compare_batch_id or compare_batch_id == batch.batch_id:
         return None
-    if _batch_has_samplings(db, compare_batch_id):
-        return compare_batch_id
-    compare_batch = db.get(TbBatch, compare_batch_id)
-    if compare_batch is None:
+    if db.get(TbBatch, compare_batch_id) is None:
         return None
-    return _first_sampled_batch_in_experiment(db, compare_batch.exp_id, batch.batch_id)
-
-
-def _batch_has_samplings(db: DbSession, batch_id: str) -> bool:
-    return bool(db.scalar(select(TbSampling.sample_id).where(TbSampling.batch_id == batch_id).limit(1)))
-
-
-def _first_sampled_batch_in_experiment(db: DbSession, exp_id: str, current_batch_id: str) -> str | None:
-    return db.scalar(
-        select(TbBatch.batch_id)
-        .join(TbSampling, TbSampling.batch_id == TbBatch.batch_id)
-        .where(TbBatch.exp_id == exp_id, TbBatch.batch_id != current_batch_id)
-        .group_by(TbBatch.batch_id, TbBatch.batch_no)
-        .order_by(TbBatch.batch_no, TbBatch.batch_id)
-        .limit(1)
-    )
+    return compare_batch_id
 
 
 def _has_calc_full_compare_columns(db: DbSession) -> bool:

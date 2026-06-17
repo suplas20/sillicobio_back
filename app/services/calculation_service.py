@@ -11,7 +11,6 @@ from app.models.batch import TbBatch
 from app.models.batch_data import TbSampling
 from app.models.calc_full import TbCalcFull
 from app.models.calc_summary import TbCalcSummary
-from app.models.experiment import TbExpPlan
 
 CALC_VERSION = "v2"
 ZERO = Decimal("0")
@@ -95,8 +94,7 @@ def run_calculation(db: Session, batch_id: str, recalculate: bool = True) -> dic
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=status_data["messages"])
 
     samplings = _get_samplings(db, batch_id)
-    compare_rows: list[dict[str, Any]] = []
-    compare_rows = _calculate_compare_rows(db, batch_id)
+    compare_rows = _calculate_compare_rows(db, batch)
 
     calculated_at = datetime.now()
     full_rows = _calculate_full_rows(batch, samplings)
@@ -108,7 +106,7 @@ def run_calculation(db: Session, batch_id: str, recalculate: bool = True) -> dic
     return {
         "message": "산출 계산이 완료되었습니다.",
         "batch_id": batch_id,
-        "compare_batch_id": None,
+        "compare_batch_id": _compare_batch_id(db, batch),
         "calc_sample_id": batch.calc_sample_id,
         "calculated_at": calculated_at.isoformat(),
         "full": [_full_response(row) for row in full_rows],
@@ -148,7 +146,7 @@ def get_calculation(
     has_result = bool(full_records) or summary_record is not None
     response = {
         "batch_id": batch_id,
-        "compare_batch_id": None,
+        "compare_batch_id": _compare_batch_id(db, batch),
         "calc_sample_id": batch.calc_sample_id,
         "calculated_at": _calculated_at(full_records, summary_record),
         "full": [
@@ -205,32 +203,11 @@ def _get_calc_sample(db: Session, batch: TbBatch, samplings: list[TbSampling]) -
 
 def _compare_batch_id(db: Session, batch: TbBatch) -> str | None:
     compare_batch_id = batch.cmp_batch_id
-    if not compare_batch_id:
-        plan = db.get(TbExpPlan, batch.exp_id)
-        compare_batch_id = plan.cmp_batch_id if plan else None
     if not compare_batch_id or compare_batch_id == batch.batch_id:
         return None
-    if _has_samplings(db, compare_batch_id):
-        return compare_batch_id
-    compare_batch = db.get(TbBatch, compare_batch_id)
-    if compare_batch is None:
+    if db.get(TbBatch, compare_batch_id) is None:
         return None
-    return _first_sampled_batch_in_experiment(db, compare_batch.exp_id, batch.batch_id)
-
-
-def _has_samplings(db: Session, batch_id: str) -> bool:
-    return bool(db.scalar(select(TbSampling.sample_id).where(TbSampling.batch_id == batch_id).limit(1)))
-
-
-def _first_sampled_batch_in_experiment(db: Session, exp_id: str, current_batch_id: str) -> str | None:
-    return db.scalar(
-        select(TbBatch.batch_id)
-        .join(TbSampling, TbSampling.batch_id == TbBatch.batch_id)
-        .where(TbBatch.exp_id == exp_id, TbBatch.batch_id != current_batch_id)
-        .group_by(TbBatch.batch_id, TbBatch.batch_no)
-        .order_by(TbBatch.batch_no, TbBatch.batch_id)
-        .limit(1)
-    )
+    return compare_batch_id
 
 
 def _missing_constants(batch: TbBatch) -> bool:
@@ -339,22 +316,19 @@ def _calculate_full_rows(batch: TbBatch, samplings: list[TbSampling]) -> list[di
 
 
 def _apply_compare(current_rows: list[dict[str, Any]], compare_rows: list[dict[str, Any]]) -> None:
-    if not compare_rows:
+    if not current_rows or not compare_rows:
         return
+    last_current_row = current_rows[-1]
+    last_compare_row = compare_rows[-1]
     for row in current_rows:
-        compare = _matched_compare_row(row.get("_batch_id"), row["age"], compare_rows)
+        compare = last_compare_row if row is last_current_row else _matched_compare_row(
+            row.get("_batch_id"),
+            row["age"],
+            compare_rows,
+        )
         if compare is None:
             continue
-        row["compare_batch_id"] = compare["_batch_id"]
-        row["compare_sample_id"] = compare["sample_id"]
-        row["compare_age"] = compare["age"]
-        row["compare_sampling_time"] = compare["sampling_time"]
-        row["compare_time_diff"] = abs(row["age"] - compare["age"])
-        row["matched_batch_id"] = compare["_batch_id"]
-        row["matched_sample_id"] = compare["sample_id"]
-        row["matched_sampling_time"] = compare["sampling_time"]
-        row["abs_yield_up"] = _divide(row["yield_pct"], compare["yield_pct"])
-        row["prod_up"] = _divide(row["productivity"], compare["productivity"])
+        _set_compare_meta(row, compare)
 
 
 def build_compare_meta_for_full_records(
@@ -362,10 +336,17 @@ def build_compare_meta_for_full_records(
     current_batch_id: str,
     full_records: list[Any],
 ) -> dict[int, dict[str, Any]]:
-    compare_rows = _calculate_compare_rows(db, current_batch_id)
+    current_batch = db.get(TbBatch, current_batch_id)
+    if current_batch is None:
+        return {}
+    compare_rows = _calculate_compare_rows(db, current_batch)
     compare_meta_by_calc_id: dict[int, dict[str, Any]] = {}
+    if not full_records or not compare_rows:
+        return compare_meta_by_calc_id
+    last_record = full_records[-1]
+    last_compare_row = compare_rows[-1]
     for record in full_records:
-        compare = _matched_compare_row(current_batch_id, record.age, compare_rows)
+        compare = last_compare_row if record is last_record else _matched_compare_row(current_batch_id, record.age, compare_rows)
         if compare is None:
             continue
         compare_meta_by_calc_id[record.calc_id] = {
@@ -373,7 +354,7 @@ def build_compare_meta_for_full_records(
             "compare_sample_id": compare["sample_id"],
             "compare_age": compare["age"],
             "compare_sampling_time": compare["sampling_time"],
-            "compare_time_diff": abs(record.age - compare["age"]) if record.age is not None and compare["age"] is not None else None,
+            "compare_time_diff": _abs_time_diff(record.age, compare["age"]),
             "matched_batch_id": compare["_batch_id"],
             "matched_sample_id": compare["sample_id"],
             "matched_sampling_time": compare["sampling_time"],
@@ -401,21 +382,27 @@ def _matched_compare_row(
     return sorted(candidates, key=lambda item: (abs(item["sampling_time"] - age), item["sampling_time"], item["sample_id"] or 0))[0] if candidates else None
 
 
-def _calculate_compare_rows(db: Session, current_batch_id: str) -> list[dict[str, Any]]:
-    compare_batch_ids = db.scalars(
-        select(TbBatch.batch_id)
-        .join(TbSampling, TbSampling.batch_id == TbBatch.batch_id)
-        .where(TbBatch.batch_id != current_batch_id)
-        .group_by(TbBatch.batch_id)
-        .order_by(TbBatch.batch_id)
-    ).all()
-    if not compare_batch_ids:
+def _calculate_compare_rows(db: Session, current_batch: TbBatch) -> list[dict[str, Any]]:
+    compare_batch_id = _compare_batch_id(db, current_batch)
+    if compare_batch_id is None:
         return []
-    batches = db.scalars(select(TbBatch).where(TbBatch.batch_id.in_(compare_batch_ids))).all()
-    rows: list[dict[str, Any]] = []
-    for compare_batch in batches:
-        rows.extend(_calculate_full_rows(compare_batch, _get_samplings(db, compare_batch.batch_id)))
-    return rows
+    compare_batch = db.get(TbBatch, compare_batch_id)
+    if compare_batch is None:
+        return []
+    return _calculate_full_rows(compare_batch, _get_samplings(db, compare_batch.batch_id))
+
+
+def _set_compare_meta(row: dict[str, Any], compare: dict[str, Any]) -> None:
+    row["compare_batch_id"] = compare["_batch_id"]
+    row["compare_sample_id"] = compare["sample_id"]
+    row["compare_age"] = compare["age"]
+    row["compare_sampling_time"] = compare["sampling_time"]
+    row["compare_time_diff"] = _abs_time_diff(row["age"], compare["age"])
+    row["matched_batch_id"] = compare["_batch_id"]
+    row["matched_sample_id"] = compare["sample_id"]
+    row["matched_sampling_time"] = compare["sampling_time"]
+    row["abs_yield_up"] = _divide(row["yield_pct"], compare["yield_pct"])
+    row["prod_up"] = _divide(row["productivity"], compare["productivity"])
 
 
 def _calculate_summary(batch: TbBatch, samplings: list[TbSampling], full_rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -706,6 +693,12 @@ def _sql_value(value):
     if isinstance(value, Decimal):
         return float(value)
     return value
+
+
+def _abs_time_diff(left: Decimal | None, right: Decimal | None) -> Decimal | None:
+    if left is None or right is None:
+        return None
+    return abs(left - right)
 
 
 def _multiply(left: Decimal | None, right: Decimal | None) -> Decimal | None:

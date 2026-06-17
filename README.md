@@ -49,6 +49,12 @@ Or use the project script:
 bash scripts/run-server.sh
 ```
 
+If the frontend is opened from another device or via a LAN/server IP, bind the API to all interfaces:
+
+```bash
+HOST=0.0.0.0 bash scripts/run-server.sh
+```
+
 Auto-reload can be enabled when the local filesystem allows file watching:
 
 ```bash

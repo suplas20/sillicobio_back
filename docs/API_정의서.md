@@ -24,6 +24,7 @@
 | 실험계획 | `start` 제거, 실험 시작일은 배치의 `startDt` 기준 |
 | 명칭 | 산출전체 / 산출요약 기준 유지 |
 | 로그성 정보 | 화면 조회 API 없이 DB에 자동 저장 |
+| 산출 비교 | 전체 DB 검색이 아니라 배치정보에서 선택된 비교배치의 샘플링 데이터만 비교 대상으로 사용 |
 
 ---
 
@@ -725,7 +726,55 @@ Set-Cookie: SESSION=<server-session-id>; HttpOnly; Path=/; SameSite=Lax
 }
 ```
 
-### 6.5 배치 파일 업로드
+### 6.5 비교배치 저장
+
+`PUT /batches/{batchId}/compare-batch`
+
+배치정보 화면에서 선택한 비교배치를 저장합니다.
+
+**Request**
+
+```json
+{
+  "cmp_batch_id": "LAB00001_BAT02"
+}
+```
+
+**Response** `200 OK`
+
+```json
+{
+  "message": "비교배치가 저장되었습니다.",
+  "batch": {
+    "batch_id": "LAB00001_BAT01",
+    "cmp_type": "BATCH",
+    "cmp_batch_id": "LAB00001_BAT02"
+  }
+}
+```
+
+정책:
+
+- 자기 자신은 비교배치로 저장할 수 없습니다. 이 경우 `400 Bad Request`를 반환합니다.
+- 산출 비교 로직은 `tb_batch.cmp_batch_id`에 저장된 비교배치만 사용합니다.
+- 선택된 비교배치에 샘플링 데이터가 없으면 비교 관련 값은 `null`로 반환됩니다.
+
+### 6.6 비교배치 조회
+
+`GET /batches/{batchId}/compare-batch`
+
+**Response** `200 OK`
+
+```json
+{
+  "batch_id": "LAB00001_BAT01",
+  "cmp_type": "BATCH",
+  "cmp_batch_id": "LAB00001_BAT02",
+  "cmp_batch_name": "LAB00001_BAT02"
+}
+```
+
+### 6.7 배치 파일 업로드
 
 `POST /batches/{batchId}/files`
 
@@ -843,11 +892,168 @@ Set-Cookie: SESSION=<server-session-id>; HttpOnly; Path=/; SameSite=Lax
 
 ## 8. 산출 Calculation
 
-### 8.1 산출 결과 조회
+### 8.1 산출확인 기준 샘플 저장
+
+`PUT /batches/{batchId}/calc-sample`
+
+산출 확인 팝업에서 기준 샘플링 row를 선택할 때 호출합니다.
+
+**Request**
+
+```json
+{
+  "sample_id": 123
+}
+```
+
+**Response** `200 OK`
+
+```json
+{
+  "message": "산출확인 기준 샘플링 데이터가 저장되었습니다.",
+  "batch_id": "LAB00001_BAT01",
+  "calc_sample_id": 123,
+  "calcSample": {
+    "id": 123,
+    "isCalcSample": true,
+    "samplingTime": 72,
+    "od": 7.2,
+    "feedWeight": 37.5,
+    "brothVolume": 3.8,
+    "targetProdConc": 2.3,
+    "glucoseConc": 3.1
+  }
+}
+```
+
+정책:
+
+- `sample_id`는 현재 `batchId`에 속한 샘플링 row여야 합니다.
+- 다른 배치의 샘플링 row를 지정하면 `400 Bad Request`를 반환합니다.
+
+### 8.2 산출확인 기준 샘플 조회
+
+`GET /batches/{batchId}/calc-sample`
+
+**Response** `200 OK`
+
+```json
+{
+  "batchId": "LAB00001_BAT01",
+  "calcSampleId": 123,
+  "hasCalcSample": true,
+  "calcSample": {
+    "id": 123,
+    "isCalcSample": true,
+    "samplingTime": 72,
+    "od": 7.2,
+    "feedWeight": 37.5,
+    "brothVolume": 3.8,
+    "targetProdConc": 2.3,
+    "glucoseConc": 3.1
+  }
+}
+```
+
+### 8.3 산출 계산 가능 상태 조회
+
+`GET /batches/{batchId}/calculation/status`
+
+산출 확인 버튼 활성화 또는 클릭 직전 검증에 사용합니다.
+
+**Response** `200 OK`
+
+```json
+{
+  "batch_id": "LAB00001_BAT01",
+  "has_batch": true,
+  "saved_sampling_count": 5,
+  "has_saved_sampling": true,
+  "calc_sample_id": 123,
+  "has_calc_sample": true,
+  "compare_batch_id": "LAB00001_BAT02",
+  "has_compare_batch": true,
+  "can_calculate": true,
+  "messages": []
+}
+```
+
+### 8.4 산출 계산 실행
+
+`POST /batches/{batchId}/calculation/run`
+
+산출전체와 산출요약을 계산하고 DB에 저장한 뒤 결과를 반환합니다.
+
+**Request**
+
+```json
+{
+  "recalculate": true
+}
+```
+
+**Response** `200 OK`
+
+```json
+{
+  "message": "산출 계산이 완료되었습니다.",
+  "batch_id": "LAB00001_BAT01",
+  "compare_batch_id": "LAB00001_BAT02",
+  "calc_sample_id": 123,
+  "calculated_at": "2026-06-17T11:30:00",
+  "full": [
+    {
+      "sample_id": 101,
+      "sampling_time": 24,
+      "base_sampling_time": 24,
+      "yield_pct": 28,
+      "productivity": 0.94,
+      "abs_yield_up": 1.03,
+      "prod_up": 0.98,
+      "compare_batch_id": "LAB00001_BAT02",
+      "compare_sample_id": 201,
+      "compare_age": 23.5,
+      "compare_sampling_time": 23.5,
+      "compare_time_diff": 0.5,
+      "matched_batch_id": "LAB00001_BAT02",
+      "matched_sample_id": 201,
+      "matched_sampling_time": 23.5
+    }
+  ],
+  "summary": {}
+}
+```
+
+#### 산출전체 비교배치 매칭 기준
+
+- 전체 DB 또는 다른 배치의 샘플링 데이터는 비교 후보로 조회하지 않습니다.
+- 배치정보에서 선택되어 `tb_batch.cmp_batch_id`에 저장된 비교배치의 샘플링 데이터만 비교 대상으로 사용합니다.
+- 기준 배치의 각 산출전체 row는 자신의 `sampling_time` 또는 `age` 기준 ±1시간 안에 있는 비교배치 샘플링 row를 찾습니다.
+- ±1시간 후보가 여러 개면 시간 차이가 가장 작은 row를 사용합니다. 시간 차이가 같으면 더 이른 `sampling_time`, 그 다음 작은 `sample_id`를 우선합니다.
+- 마지막 산출전체 row는 시간 차이와 상관없이 비교배치 샘플링 데이터의 마지막 row와 반드시 비교합니다.
+- 마지막 row가 아닌 row에서 ±1시간 후보가 없으면 `compare_sample_id`, `compare_sampling_time`, `compare_time_diff`, `abs_yield_up`, `prod_up` 등 비교 관련 값은 `null`입니다.
+- 비교배치가 선택되지 않았거나 비교배치에 샘플링 데이터가 없으면 모든 산출전체 row의 비교 관련 값은 `null`입니다.
+
+### 8.5 저장된 산출 계산 결과 조회
+
+`GET /batches/{batchId}/calculation`
+
+이미 DB에 저장된 산출 계산 결과를 조회합니다. 재계산하지 않습니다.
+
+**Query Parameters**
+
+| 파라미터 | 타입 | 기본값 | 설명 |
+|---|---|---|---|
+| `include_full` | boolean | `true` | 산출전체 포함 여부 |
+| `include_summary` | boolean | `true` | 산출요약 포함 여부 |
+
+응답 구조는 `POST /batches/{batchId}/calculation/run`과 동일합니다.
+
+### 8.6 기존 산출 결과 조회
 
 `GET /batches/{batchId}/calc`
 
-배치별 산출전체와 산출요약을 조회합니다.
+배치별 저장 산출전체와 산출요약을 조회하는 기존 호환 API입니다.
 
 **Response** `200 OK`
 
@@ -859,7 +1065,7 @@ Set-Cookie: SESSION=<server-session-id>; HttpOnly; Path=/; SameSite=Lax
 }
 ```
 
-### 8.2 산출 확인 원페이지 조회
+### 8.7 산출 확인 원페이지 조회
 
 `GET /batches/{batchId}/calc-view`
 
@@ -976,10 +1182,17 @@ Set-Cookie: SESSION=<server-session-id>; HttpOnly; Path=/; SameSite=Lax
 | Batch | GET | `/batches/{batchId}` | 배치 상세 | 로그인 |
 | Batch | PUT | `/batches/{batchId}/detail` | 배치 상세 저장 | 로그인 |
 | Batch | GET | `/batches/options` | 비교배치 옵션 | 로그인 |
+| Batch | PUT | `/batches/{batchId}/compare-batch` | 비교배치 저장 | 로그인 |
+| Batch | GET | `/batches/{batchId}/compare-batch` | 비교배치 조회 | 로그인 |
 | Batch | POST | `/batches/{batchId}/files` | 배치 파일 업로드 | 로그인 |
 | Sampling | GET | `/batches/{batchId}/sampling` | 샘플링 조회 | 로그인 |
 | Sampling | PUT | `/batches/{batchId}/sampling` | 샘플링 저장 | 로그인 |
-| Calculation | GET | `/batches/{batchId}/calc` | 산출 결과 조회 | 로그인 |
+| Calculation | PUT | `/batches/{batchId}/calc-sample` | 산출확인 기준 샘플 저장 | 로그인 |
+| Calculation | GET | `/batches/{batchId}/calc-sample` | 산출확인 기준 샘플 조회 | 로그인 |
+| Calculation | GET | `/batches/{batchId}/calculation/status` | 산출 계산 가능 상태 조회 | 로그인 |
+| Calculation | POST | `/batches/{batchId}/calculation/run` | 산출 계산 실행 | 로그인 |
+| Calculation | GET | `/batches/{batchId}/calculation` | 저장된 산출 계산 결과 조회 | 로그인 |
+| Calculation | GET | `/batches/{batchId}/calc` | 기존 산출 결과 조회 | 로그인 |
 | Calculation | GET | `/batches/{batchId}/calc-view` | 산출 확인 원페이지 조회 | 로그인 |
 | Result | GET | `/results` | 결과정보 목록 | 로그인 |
 | Result | GET | `/results/{batchId}` | 결과정보 상세 | 로그인 |
