@@ -112,7 +112,7 @@ def batch_options(
         stmt = stmt.where(TbBatch.batch_id != excludeBatchId)
     if keyword:
         stmt = stmt.where((TbBatch.batch_id.ilike(f"%{keyword}%")) | (TbExpPlan.purpose.ilike(f"%{keyword}%")))
-    rows = db.execute(stmt.order_by(TbBatch.batch_id.desc())).all()
+    rows = db.execute(stmt.order_by(TbBatch.batch_id.asc())).all()
 
     batch_ids = [b.batch_id for b, _ in rows]
     sampling_map: dict[str, TbSampling] = {}
@@ -171,7 +171,7 @@ def search_batches(
     _: CurrentMember,
     keyword: str | None = None,
     sort_field: str = "sampling_time",
-    sort_order: str = "desc",
+    sort_order: str = "asc",
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
 ) -> dict:
@@ -272,11 +272,11 @@ def search_batches(
         .outerjoin(last_sampling, (TbBatch.batch_id == last_sampling.c.batch_id) & (last_sampling.c.rn == 1))
         .outerjoin(best_batch, TbBatch.batch_id == best_batch.c.batch_id)
         .order_by(
+            sort_expr.nullslast(),
             case((best_batch.c.batch_id.is_not(None), 0), else_=1),
             best_batch.c.sort_ord.asc().nullslast(),
             best_batch.c.best_reg_dt.desc().nullslast(),
-            sort_expr.nullslast(),
-            TbBatch.batch_id.desc(),
+            TbBatch.batch_id.asc(),
         )
         .offset((page - 1) * limit)
         .limit(limit)
@@ -459,7 +459,7 @@ def get_sampling(batch_id: str, db: DbSession, _: CurrentMember) -> dict:
     rows = db.scalars(
         select(TbSampling)
         .where(TbSampling.batch_id == batch_id)
-        .order_by(TbSampling.sampling_time.desc(), TbSampling.sample_id.desc())
+        .order_by(TbSampling.sampling_time.asc(), TbSampling.sample_id.asc())
     ).all()
     return {
         "batchId": batch_id,
@@ -513,7 +513,7 @@ def get_calc(batch_id: str, db: DbSession, _: CurrentMember) -> dict:
     if batch is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     full = db.scalars(
-        select(TbCalcFull).where(TbCalcFull.batch_id == batch_id).order_by(TbCalcFull.age.desc(), TbCalcFull.sample_id.desc())
+        select(TbCalcFull).where(TbCalcFull.batch_id == batch_id).order_by(TbCalcFull.age.asc(), TbCalcFull.sample_id.asc())
     ).all()
     compare_meta_by_calc_id = build_compare_meta_for_full_records(
         db,
@@ -710,7 +710,7 @@ def _batch_researchers(db: DbSession, batch_id: str) -> list[dict]:
         select(TbBatchResearcher, TbResearcher)
         .join(TbResearcher, TbResearcher.researcher_id == TbBatchResearcher.researcher_id)
         .where(TbBatchResearcher.batch_id == batch_id)
-        .order_by(TbBatchResearcher.researcher_role)
+        .order_by(TbBatchResearcher.researcher_role.desc(), TbBatchResearcher.researcher_id.desc())
     ).all()
     return [
         {"role": br.researcher_role, "id": researcher.researcher_id, "name": researcher.researcher_nm}

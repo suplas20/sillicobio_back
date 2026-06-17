@@ -127,7 +127,9 @@ def get_calculation(
     needs_full_records = include_full or include_summary
     if needs_full_records:
         full_records = db.scalars(
-            select(TbCalcFull).where(TbCalcFull.batch_id == batch_id).order_by(TbCalcFull.age, TbCalcFull.sample_id)
+            select(TbCalcFull)
+            .where(TbCalcFull.batch_id == batch_id)
+            .order_by(TbCalcFull.age.asc(), TbCalcFull.sample_id.asc())
         ).all()
         compare_meta_by_calc_id = build_compare_meta_for_full_records(db, batch_id, full_records)
         sampling_time_by_sample_id = _sampling_time_by_sample_id(
