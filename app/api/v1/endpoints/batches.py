@@ -45,6 +45,7 @@ def list_batches(
     planId: str | None = None,
     batchId: str | None = None,
     purpose: str | None = None,
+    sort: str = "created,desc",
     page: int = Query(1, ge=1),
     size: int = Query(10, ge=1, le=100),
 ) -> dict:
@@ -60,7 +61,7 @@ def list_batches(
         stmt = stmt.where(TbExpPlan.purpose.ilike(f"%{purpose}%"))
         count_stmt = count_stmt.where(TbExpPlan.purpose.ilike(f"%{purpose}%"))
     total = db.scalar(count_stmt) or 0
-    rows = db.execute(stmt.order_by(TbBatch.batch_id).offset((page - 1) * size).limit(size)).all()
+    rows = db.execute(stmt.order_by(*_batch_list_order_by(sort)).offset((page - 1) * size).limit(size)).all()
     return {
         "total": total,
         "page": page,
@@ -77,6 +78,28 @@ def list_batches(
     }
 
 
+def _batch_list_order_by(sort: str):
+    field, _, direction = (sort or "created,desc").partition(",")
+    direction = direction.lower() if direction else "desc"
+    if direction not in {"asc", "desc"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid sort")
+
+    sort_columns = {
+        "created": TbBatch.reg_dt,
+        "batchId": TbBatch.batch_id,
+        "batch_id": TbBatch.batch_id,
+        "planId": TbBatch.exp_id,
+        "plan_id": TbBatch.exp_id,
+        "purpose": TbExpPlan.purpose,
+    }
+    sort_column = sort_columns.get(field)
+    if sort_column is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid sort")
+
+    order_expr = sort_column.asc() if direction == "asc" else sort_column.desc()
+    return (order_expr, TbBatch.batch_id.desc())
+
+
 @router.get("/options")
 def batch_options(
     db: DbSession,
@@ -89,7 +112,7 @@ def batch_options(
         stmt = stmt.where(TbBatch.batch_id != excludeBatchId)
     if keyword:
         stmt = stmt.where((TbBatch.batch_id.ilike(f"%{keyword}%")) | (TbExpPlan.purpose.ilike(f"%{keyword}%")))
-    rows = db.execute(stmt.order_by(TbBatch.batch_id)).all()
+    rows = db.execute(stmt.order_by(TbBatch.batch_id.desc())).all()
 
     batch_ids = [b.batch_id for b, _ in rows]
     sampling_map: dict[str, TbSampling] = {}
@@ -253,7 +276,7 @@ def search_batches(
             best_batch.c.sort_ord.asc().nullslast(),
             best_batch.c.best_reg_dt.desc().nullslast(),
             sort_expr.nullslast(),
-            TbBatch.batch_id.asc(),
+            TbBatch.batch_id.desc(),
         )
         .offset((page - 1) * limit)
         .limit(limit)
@@ -434,7 +457,9 @@ def get_sampling(batch_id: str, db: DbSession, _: CurrentMember) -> dict:
     if batch is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     rows = db.scalars(
-        select(TbSampling).where(TbSampling.batch_id == batch_id).order_by(TbSampling.sampling_time)
+        select(TbSampling)
+        .where(TbSampling.batch_id == batch_id)
+        .order_by(TbSampling.sampling_time.desc(), TbSampling.sample_id.desc())
     ).all()
     return {
         "batchId": batch_id,
@@ -487,7 +512,9 @@ def get_calc(batch_id: str, db: DbSession, _: CurrentMember) -> dict:
     batch = db.get(TbBatch, batch_id)
     if batch is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    full = db.scalars(select(TbCalcFull).where(TbCalcFull.batch_id == batch_id).order_by(TbCalcFull.age)).all()
+    full = db.scalars(
+        select(TbCalcFull).where(TbCalcFull.batch_id == batch_id).order_by(TbCalcFull.age.desc(), TbCalcFull.sample_id.desc())
+    ).all()
     compare_meta_by_calc_id = build_compare_meta_for_full_records(
         db,
         batch_id,

@@ -24,6 +24,7 @@ def list_results(
     planId: str | None = None,
     batchId: str | None = None,
     purpose: str | None = None,
+    sort: str = "created,desc",
     page: int = Query(1, ge=1),
     size: int = Query(10, ge=1, le=100),
 ) -> dict:
@@ -39,7 +40,7 @@ def list_results(
         stmt = stmt.where(TbExpPlan.purpose.ilike(f"%{purpose}%"))
         count_stmt = count_stmt.where(TbExpPlan.purpose.ilike(f"%{purpose}%"))
     total = db.scalar(count_stmt) or 0
-    rows = db.execute(stmt.order_by(TbBatch.batch_id).offset((page - 1) * size).limit(size)).all()
+    rows = db.execute(stmt.order_by(*_result_list_order_by(sort)).offset((page - 1) * size).limit(size)).all()
     return {
         "total": total,
         "page": page,
@@ -57,9 +58,33 @@ def list_results(
     }
 
 
+def _result_list_order_by(sort: str):
+    field, _, direction = (sort or "created,desc").partition(",")
+    direction = direction.lower() if direction else "desc"
+    if direction not in {"asc", "desc"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid sort")
+
+    sort_columns = {
+        "created": TbBatch.reg_dt,
+        "batchId": TbBatch.batch_id,
+        "batch_id": TbBatch.batch_id,
+        "planId": TbBatch.exp_id,
+        "plan_id": TbBatch.exp_id,
+        "purpose": TbExpPlan.purpose,
+        "startDt": TbBatch.start_dt,
+        "start_dt": TbBatch.start_dt,
+    }
+    sort_column = sort_columns.get(field)
+    if sort_column is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid sort")
+
+    order_expr = sort_column.asc() if direction == "asc" else sort_column.desc()
+    return (order_expr, TbBatch.batch_id.desc())
+
+
 @router.get("/experiments/{experiment_id}")
 def get_experiment_results(experiment_id: str, db: DbSession, member: CurrentMember) -> dict:
-    rows = db.scalars(select(TbBatch.batch_id).where(TbBatch.exp_id == experiment_id).order_by(TbBatch.batch_id)).all()
+    rows = db.scalars(select(TbBatch.batch_id).where(TbBatch.exp_id == experiment_id).order_by(TbBatch.batch_id.desc())).all()
     return {"planId": experiment_id, "items": [get_calc_view(batch_id, db, member) for batch_id in rows]}
 
 
@@ -131,4 +156,4 @@ def _pdf_batch_ids(db: DbSession, payload: ResultPdfDownloadRequest) -> list[str
         stmt = stmt.where(TbBatch.batch_id.ilike(f"%{payload.batch_id}%"))
     if payload.purpose:
         stmt = stmt.where(TbExpPlan.purpose.ilike(f"%{payload.purpose}%"))
-    return db.scalars(stmt.order_by(TbBatch.batch_id)).all()
+    return db.scalars(stmt.order_by(TbBatch.batch_id.desc())).all()

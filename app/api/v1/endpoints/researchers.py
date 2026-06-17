@@ -29,7 +29,9 @@ def list_researchers(
         stmt = stmt.where(TbResearcher.researcher_nm.ilike(f"%{name}%"))
         count_stmt = count_stmt.where(TbResearcher.researcher_nm.ilike(f"%{name}%"))
     total = db.scalar(count_stmt) or 0
-    rows = db.scalars(stmt.order_by(TbResearcher.researcher_id).offset((page - 1) * size).limit(size)).all()
+    rows = db.scalars(
+        stmt.order_by(TbResearcher.reg_dt.desc(), TbResearcher.researcher_id.desc()).offset((page - 1) * size).limit(size)
+    ).all()
     return {"total": total, "page": page, "size": size, "items": [_researcher_response(row) for row in rows]}
 
 

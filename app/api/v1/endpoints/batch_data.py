@@ -26,7 +26,11 @@ def list_batch_data(
         stmt = stmt.where(TbSampling.batch_id == batchId)
         count_stmt = count_stmt.where(TbSampling.batch_id == batchId)
     total = db.scalar(count_stmt) or 0
-    rows = db.scalars(stmt.order_by(TbSampling.batch_id, TbSampling.sampling_time).offset((page - 1) * size).limit(size)).all()
+    rows = db.scalars(
+        stmt.order_by(TbSampling.batch_id.desc(), TbSampling.sampling_time.desc(), TbSampling.sample_id.desc())
+        .offset((page - 1) * size)
+        .limit(size)
+    ).all()
     return {"total": total, "page": page, "size": size, "items": [_sampling_response(row) for row in rows]}
 
 

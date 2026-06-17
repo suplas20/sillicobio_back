@@ -49,7 +49,7 @@ def get_experiment(experiment_id: str, db: DbSession, member: CurrentMember) -> 
 
 @router.get("/{experiment_id}/batches")
 def list_experiment_batches(experiment_id: str, db: DbSession, _: CurrentMember) -> dict:
-    batches = db.scalars(select(TbBatch).where(TbBatch.exp_id == experiment_id).order_by(TbBatch.batch_id)).all()
+    batches = db.scalars(select(TbBatch).where(TbBatch.exp_id == experiment_id).order_by(TbBatch.batch_id.desc())).all()
     return {"items": [{"id": batch.batch_id, "planId": batch.exp_id, "batchNo": batch.batch_no} for batch in batches]}
 
 

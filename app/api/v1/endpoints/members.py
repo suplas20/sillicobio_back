@@ -31,7 +31,9 @@ def list_members(
         count_stmt = count_stmt.where(TbMember.member_nm.ilike(f"%{name}%"))
 
     total = db.scalar(count_stmt) or 0
-    members = db.scalars(stmt.order_by(TbMember.member_id).offset((page - 1) * size).limit(size)).all()
+    members = db.scalars(
+        stmt.order_by(TbMember.reg_dt.desc(), TbMember.member_id.desc()).offset((page - 1) * size).limit(size)
+    ).all()
     return {
         "total": total,
         "page": page,

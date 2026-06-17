@@ -81,7 +81,17 @@ axios.defaults.withCredentials = true;
 - 사용자 권한이 `/researchers`, `/members` API에 접근하면 서버는 `403 Forbidden`을 반환합니다.
 - 로그성 정보는 화면에 표시하지 않고 서버에서 DB에만 자동 생성합니다.
 
-### 1.4 날짜 형식
+### 1.4 목록 정렬 정책
+
+목록을 반환하는 API의 기본 정렬 방향은 내림차순입니다.
+
+정책:
+
+- 별도 정렬 파라미터가 없는 목록 API는 최신 등록 데이터 또는 큰 식별자가 먼저 오도록 반환합니다.
+- 정렬 파라미터가 있는 API도 기본값은 `desc`입니다.
+- 프론트에서 명시적으로 `asc`를 요청한 경우에만 오름차순으로 반환합니다.
+
+### 1.5 날짜 형식
 
 | 용도 | 형식 | 예시 |
 |---|---|---|
@@ -89,7 +99,7 @@ axios.defaults.withCredentials = true;
 | 화면 표시 | `YYYY.MM.DD` | `2026.06.10` |
 | 로그/일시 | ISO 또는 `YYYYMMDDHHmmss` | `20260610120000` |
 
-### 1.5 페이지네이션
+### 1.6 페이지네이션
 
 ```json
 {
@@ -100,7 +110,7 @@ axios.defaults.withCredentials = true;
 }
 ```
 
-### 1.6 에러 응답
+### 1.7 에러 응답
 
 ```json
 {
@@ -124,7 +134,7 @@ axios.defaults.withCredentials = true;
 | `409` | 중복 또는 충돌 |
 | `500` | 서버 오류 |
 
-### 1.7 Audit Log 정책
+### 1.8 Audit Log 정책
 
 1차 개발 범위에서는 로그 조회 화면/API를 제공하지 않습니다.
 
@@ -600,6 +610,7 @@ Set-Cookie: SESSION=<server-session-id>; HttpOnly; Path=/; SameSite=Lax
 | `planId` | string | 실험 ID |
 | `batchId` | string | 배치 ID |
 | `purpose` | string | 실험목적 검색 |
+| `sort` | string | 기본값 `created,desc`. `created`, `batchId`, `planId`, `purpose` 기준 정렬 가능 |
 | `page` | number | 페이지 번호 |
 | `size` | number | 페이지 크기 |
 
@@ -1103,6 +1114,7 @@ Set-Cookie: SESSION=<server-session-id>; HttpOnly; Path=/; SameSite=Lax
 | `planId` | string | 실험 ID |
 | `batchId` | string | 배치 ID |
 | `purpose` | string | 실험목적 검색 |
+| `sort` | string | 기본값 `created,desc`. `created`, `batchId`, `planId`, `purpose`, `startDt` 기준 정렬 가능 |
 | `page` | number | 페이지 번호 |
 | `size` | number | 페이지 크기 |
 

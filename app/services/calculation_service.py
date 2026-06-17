@@ -343,7 +343,7 @@ def build_compare_meta_for_full_records(
     compare_meta_by_calc_id: dict[int, dict[str, Any]] = {}
     if not full_records or not compare_rows:
         return compare_meta_by_calc_id
-    last_record = full_records[-1]
+    last_record = _last_full_record(full_records)
     last_compare_row = compare_rows[-1]
     for record in full_records:
         compare = last_compare_row if record is last_record else _matched_compare_row(current_batch_id, record.age, compare_rows)
@@ -362,6 +362,17 @@ def build_compare_meta_for_full_records(
             "prod_up": _divide(record.productivity, compare["productivity"]),
         }
     return compare_meta_by_calc_id
+
+
+def _last_full_record(full_records: list[Any]) -> Any:
+    return sorted(
+        full_records,
+        key=lambda record: (
+            record.age is not None,
+            record.age or ZERO,
+            record.sample_id or 0,
+        ),
+    )[-1]
 
 
 def _matched_compare_row(
