@@ -59,10 +59,14 @@
       padding: 16px 18px;
       border: 1px solid #E5E7EB;
       border-radius: 10px;
+      break-inside: avoid;
       page-break-inside: avoid;
       background: #fff;
     }
-    .section.breakable { page-break-inside: auto; }
+    .section.breakable {
+      break-inside: auto;
+      page-break-inside: auto;
+    }
     .section-title {
       display: flex;
       align-items: center;
@@ -93,7 +97,7 @@
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 1px;
-      overflow: hidden;
+      overflow: visible;
       border: 1px solid #E5E7EB;
       border-radius: 8px;
       background: #E5E7EB;
@@ -117,7 +121,7 @@
       word-break: break-word;
     }
     .table-wrap {
-      overflow: hidden;
+      overflow: visible;
       border: 1px solid #E5E7EB;
       border-radius: 8px;
       background: #fff;
@@ -125,7 +129,7 @@
     table {
       width: 100%;
       border-collapse: collapse;
-      table-layout: auto;
+      table-layout: fixed;
       font-size: 11px;
     }
     thead { display: table-header-group; }
@@ -138,7 +142,9 @@
       font-size: 11px;
       font-weight: 900;
       text-align: center;
-      white-space: nowrap;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: keep-all;
     }
     th:last-child { border-right: none; }
     th.col-by { background: #0E948F; }
@@ -152,7 +158,8 @@
       font-weight: 700;
       text-align: center;
       vertical-align: middle;
-      white-space: nowrap;
+      white-space: normal;
+      overflow-wrap: anywhere;
     }
     td:last-child { border-right: none; }
     tbody tr:last-child td { border-bottom: none; }
@@ -182,7 +189,19 @@
       font-weight: 700;
       line-height: 1.7;
     }
-    .summary-table th, .summary-table td { font-size: 11px; padding: 8px 7px; }
+    .sampling-table th,
+    .sampling-table td {
+      font-size: 9.5px;
+      padding: 6px 5px;
+    }
+    .calc-table th,
+    .calc-table td,
+    .summary-table th,
+    .summary-table td {
+      font-size: 8.5px;
+      padding: 5px 4px;
+      line-height: 1.35;
+    }
     .footer {
       margin-top: 14px;
       padding-top: 10px;
@@ -243,7 +262,7 @@
         <span class="count-text">건수 <b>{{ sampling_items|length if sampling_items is defined and sampling_items else 0 }}</b>개</span>
       </div>
       <div class="table-wrap">
-        <table>
+        <table class="sampling-table">
           <thead>
             <tr>
               <th>기준</th><th>Sampling time (hr)</th><th>OD</th><th>Feed weight (g)</th><th>Broth volume (L)</th><th>Target product conc. (g/L)</th><th>Glucose conc. (g/L)</th><th>Lycopene (g/L)</th><th>α-carotene (g/L)</th><th>β-carotene (g/L)</th><th>Citric acid (g/L)</th><th>Pyruvic acid (g/L)</th><th>Succinic acid (g/L)</th><th>Lactic acid (g/L)</th><th>Acetic acid (g/L)</th>
@@ -271,7 +290,7 @@
         <span class="count-text">건수 <b>{{ calc_full|length if calc_full is defined and calc_full else 0 }}</b>개</span>
       </div>
       <div class="table-wrap">
-        <table>
+        <table class="calc-table">
           <thead>
             <tr>
               <th>Sampling time (hr)</th><th>비교배치 Sampling time (hr)</th><th>Lutein</th><th>Max Lutein</th><th>Yield</th><th>생산성</th><th>생산량</th><th>전환수율①</th><th>생산성①</th><th>TS</th><th>O/I</th><th>SCR</th><th>SSCR</th><th>Yx/s</th><th>Current OD</th><th>Max. OD</th><th>ΔOD</th><th class="col-by">Lycopene</th><th class="col-by">α-carotene</th><th class="col-by">β-carotene</th><th class="col-oa">Citric</th><th class="col-oa">Pyruvic</th><th class="col-oa">Succinic</th><th class="col-oa">Lactic</th><th class="col-oa">Acetic</th>
