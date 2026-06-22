@@ -1,9 +1,11 @@
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 from shutil import copyfileobj
+from urllib.parse import quote
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import bindparam, case, delete, func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -32,6 +34,7 @@ from app.services.calculation_service import (
     run_calculation,
     save_calc_sample,
 )
+from app.services.pdf_service import create_calc_view_pdf
 from app.utils.formatters import number, yyyymmdd
 
 
@@ -456,16 +459,11 @@ def get_sampling(batch_id: str, db: DbSession, _: CurrentMember) -> dict:
     batch = db.get(TbBatch, batch_id)
     if batch is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    rows = db.scalars(
-        select(TbSampling)
-        .where(TbSampling.batch_id == batch_id)
-        .order_by(TbSampling.sampling_time.asc(), TbSampling.sample_id.asc())
-    ).all()
     return {
         "batchId": batch_id,
         "calcSampleId": batch.calc_sample_id,
         "columns": SAMPLING_COLUMNS,
-        "rows": [_sampling_response(row, batch.calc_sample_id) for row in rows],
+        "rows": _sampling_rows(db, batch_id, batch.calc_sample_id),
     }
 
 
@@ -562,15 +560,38 @@ def get_calc_view(batch_id: str, db: DbSession, member: CurrentMember) -> dict:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     calc = get_calc(batch_id, db, member)
     sampling = get_sampling(batch_id, db, member)["rows"]
+    compare_batch_id = _batch_compare_batch_id(db, batch)
+    compare_sampling = _sampling_rows(db, compare_batch_id) if compare_batch_id else []
     return {
         "batch": _batch_detail_response(db, batch),
         "plan": _plan_response(batch.plan) if hasattr(batch, "plan") else _plan_response(db.get(TbExpPlan, batch.exp_id)),
         "researchers": _batch_researchers(db, batch_id),
         "files": _batch_files(db, batch_id),
         "sampling": sampling,
+        "compareBatchId": compare_batch_id,
+        "compareSampling": compare_sampling,
         "calcFull": calc["full"],
         "calcSummary": calc["summary"],
     }
+
+
+@router.get("/{batch_id}/calc-view/pdf-download")
+def download_calc_view_pdf(
+    batch_id: str,
+    db: DbSession,
+    member: CurrentMember,
+) -> StreamingResponse:
+    view = get_calc_view(batch_id, db, member)
+    try:
+        pdf_bytes = create_calc_view_pdf(view)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+    filename = f"{batch_id}_calc_view.pdf"
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )
 
 
 @router.post("/{batch_id}/files", status_code=status.HTTP_201_CREATED)
@@ -782,6 +803,15 @@ def _replace_sampling(db: DbSession, batch_id: str, rows: list, member_id: str) 
         )
         if matched_sample is not None:
             batch.calc_sample_id = matched_sample.sample_id
+
+
+def _sampling_rows(db: DbSession, batch_id: str, calc_sample_id: int | None = None) -> list[dict]:
+    rows = db.scalars(
+        select(TbSampling)
+        .where(TbSampling.batch_id == batch_id)
+        .order_by(TbSampling.sampling_time.asc(), TbSampling.sample_id.asc())
+    ).all()
+    return [_sampling_response(row, calc_sample_id) for row in rows]
 
 
 def _sampling_response(row: TbSampling, calc_sample_id: int | None = None) -> dict:
