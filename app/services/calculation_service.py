@@ -331,10 +331,8 @@ def _calculate_full_rows(batch: TbBatch, samplings: list[TbSampling]) -> list[di
 def _apply_compare(current_rows: list[dict[str, Any]], compare_rows: list[dict[str, Any]]) -> None:
     if not current_rows or not compare_rows:
         return
-    last_current_row = current_rows[-1]
-    last_compare_row = compare_rows[-1]
     for row in current_rows:
-        compare = last_compare_row if row is last_current_row else _matched_compare_row(
+        compare = _matched_compare_row(
             row.get("_batch_id"),
             row["age"],
             compare_rows,
@@ -356,10 +354,8 @@ def build_compare_meta_for_full_records(
     compare_meta_by_calc_id: dict[int, dict[str, Any]] = {}
     if not full_records or not compare_rows:
         return compare_meta_by_calc_id
-    last_record = _last_full_record(full_records)
-    last_compare_row = compare_rows[-1]
     for record in full_records:
-        compare = last_compare_row if record is last_record else _matched_compare_row(current_batch_id, record.age, compare_rows)
+        compare = _matched_compare_row(current_batch_id, record.age, compare_rows)
         if compare is None:
             continue
         compare_meta_by_calc_id[record.calc_id] = {
@@ -375,17 +371,6 @@ def build_compare_meta_for_full_records(
             "prod_up": _divide(record.productivity, compare["productivity"]),
         }
     return compare_meta_by_calc_id
-
-
-def _last_full_record(full_records: list[Any]) -> Any:
-    return sorted(
-        full_records,
-        key=lambda record: (
-            record.age is not None,
-            record.age or ZERO,
-            record.sample_id or 0,
-        ),
-    )[-1]
 
 
 def _matched_compare_row(
@@ -671,6 +656,14 @@ def _summary_model_response(
         "yx_s": _display_number(row.yx_s),
         "abs_yield_up": _display_number(compare_meta.get("abs_yield_up")) if include_compare else None,
         "prod_up": _display_number(compare_meta.get("prod_up")) if include_compare else None,
+        "compare_batch_id": compare_meta.get("compare_batch_id") if include_compare else None,
+        "compare_sample_id": compare_meta.get("compare_sample_id") if include_compare else None,
+        "compare_age": _display_number(compare_meta.get("compare_age")) if include_compare else None,
+        "compare_sampling_time": _display_number(compare_meta.get("compare_sampling_time")) if include_compare else None,
+        "compare_time_diff": _display_number(compare_meta.get("compare_time_diff")) if include_compare else None,
+        "matched_batch_id": compare_meta.get("matched_batch_id") if include_compare else None,
+        "matched_sample_id": compare_meta.get("matched_sample_id") if include_compare else None,
+        "matched_sampling_time": _display_number(compare_meta.get("matched_sampling_time")) if include_compare else None,
         "max_od": _display_number(row.max_od),
         "fn": _display_number(row.fn),
         "delta_od": _display_number(row.delta_od),
@@ -735,7 +728,7 @@ def _divide(left: Decimal | None, right: Decimal | None) -> Decimal | None:
     if left is None or right is None:
         return None
     if right == ZERO:
-        return ZERO
+        return None
     return left / right
 
 

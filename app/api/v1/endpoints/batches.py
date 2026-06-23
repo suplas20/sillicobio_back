@@ -872,10 +872,26 @@ def _calc_summary_response(row: TbCalcSummary, include_compare: bool = True, com
     if not include_compare:
         data["abs_yield_up"] = None
         data["prod_up"] = None
+        data["compare_batch_id"] = None
+        data["compare_sample_id"] = None
+        data["compare_age"] = None
+        data["compare_sampling_time"] = None
+        data["compare_time_diff"] = None
+        data["matched_batch_id"] = None
+        data["matched_sample_id"] = None
+        data["matched_sampling_time"] = None
     else:
         compare_meta = compare_meta or {}
         data["abs_yield_up"] = _serialize(compare_meta.get("abs_yield_up"))
         data["prod_up"] = _serialize(compare_meta.get("prod_up"))
+        data["compare_batch_id"] = compare_meta.get("compare_batch_id")
+        data["compare_sample_id"] = compare_meta.get("compare_sample_id")
+        data["compare_age"] = _serialize(compare_meta.get("compare_age"))
+        data["compare_sampling_time"] = _serialize(compare_meta.get("compare_sampling_time"))
+        data["compare_time_diff"] = _serialize(compare_meta.get("compare_time_diff"))
+        data["matched_batch_id"] = compare_meta.get("matched_batch_id")
+        data["matched_sample_id"] = compare_meta.get("matched_sample_id")
+        data["matched_sampling_time"] = _serialize(compare_meta.get("matched_sampling_time"))
     return data
 
 
