@@ -57,7 +57,7 @@ class CalculationServiceTest(unittest.TestCase):
         self.assertLess(rows[1]["scr"], 0)
         self.assertLess(rows[1]["sscr"], 0)
 
-    def test_compare_uses_one_hour_match_without_forcing_last_row(self):
+    def test_compare_uses_one_hour_match_and_forces_last_row_to_last_compare_sample(self):
         current_batch = _batch("BATCH01")
         compare_batch = _batch("BATCH02")
         current_rows = _calculate_full_rows(
@@ -83,8 +83,9 @@ class CalculationServiceTest(unittest.TestCase):
         self.assertEqual(current_rows[0]["compare_sampling_time"], Decimal("10.5"))
         self.assertEqual(current_rows[1]["compare_sample_id"], 12)
         self.assertEqual(current_rows[1]["compare_sampling_time"], Decimal("20.5"))
-        self.assertIsNone(current_rows[2]["compare_sample_id"])
-        self.assertIsNone(current_rows[2]["compare_sampling_time"])
+        self.assertEqual(current_rows[2]["compare_sample_id"], 13)
+        self.assertEqual(current_rows[2]["compare_sampling_time"], Decimal("90"))
+        self.assertEqual(current_rows[2]["compare_time_diff"], Decimal("60"))
 
     def test_all_compare_type_uses_plan_compare_batch(self):
         db = _FakeDb(
