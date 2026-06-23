@@ -2,7 +2,9 @@ from decimal import Decimal
 from types import SimpleNamespace
 import unittest
 
-from app.services.calculation_service import _apply_compare, _calculate_full_rows
+from app.models.batch import TbBatch
+from app.models.experiment import TbExpPlan
+from app.services.calculation_service import _apply_compare, _calculate_full_rows, resolve_compare_batch_id
 
 
 class CalculationServiceTest(unittest.TestCase):
@@ -83,10 +85,40 @@ class CalculationServiceTest(unittest.TestCase):
         self.assertEqual(current_rows[2]["compare_sampling_time"], Decimal("90"))
         self.assertEqual(current_rows[2]["compare_time_diff"], Decimal("60"))
 
+    def test_all_compare_type_uses_plan_compare_batch(self):
+        db = _FakeDb(
+            batches={
+                "BATCH01": _batch("BATCH01", exp_id="PLAN01", cmp_type="ALL"),
+                "BATCH02": _batch("BATCH02", exp_id="PLAN02"),
+            },
+            plans={"PLAN01": SimpleNamespace(cmp_batch_id="BATCH02")},
+        )
 
-def _batch(batch_id):
+        compare_batch_id = resolve_compare_batch_id(db, db.batches["BATCH01"])
+
+        self.assertEqual(compare_batch_id, "BATCH02")
+
+    def test_batch_compare_type_prefers_batch_compare_batch(self):
+        db = _FakeDb(
+            batches={
+                "BATCH01": _batch("BATCH01", exp_id="PLAN01", cmp_type="BATCH", cmp_batch_id="BATCH03"),
+                "BATCH02": _batch("BATCH02", exp_id="PLAN02"),
+                "BATCH03": _batch("BATCH03", exp_id="PLAN03"),
+            },
+            plans={"PLAN01": SimpleNamespace(cmp_batch_id="BATCH02")},
+        )
+
+        compare_batch_id = resolve_compare_batch_id(db, db.batches["BATCH01"])
+
+        self.assertEqual(compare_batch_id, "BATCH03")
+
+
+def _batch(batch_id, exp_id="PLAN01", cmp_type=None, cmp_batch_id=None):
     return SimpleNamespace(
         batch_id=batch_id,
+        exp_id=exp_id,
+        cmp_type=cmp_type,
+        cmp_batch_id=cmp_batch_id,
         feed_glucose_conc=Decimal("100"),
         feed_density=Decimal("1"),
         dcw_od_factor=Decimal("1"),
@@ -115,3 +147,16 @@ def _sampling(sample_id, sampling_time, od, feed_weight, broth_volume, target_pr
         lactic_acid=None,
         acetic_acid=None,
     )
+
+
+class _FakeDb:
+    def __init__(self, batches, plans):
+        self.batches = batches
+        self.plans = plans
+
+    def get(self, model, key):
+        if model is TbBatch:
+            return self.batches.get(key)
+        if model is TbExpPlan:
+            return self.plans.get(key)
+        return None

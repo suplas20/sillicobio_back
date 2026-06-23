@@ -11,6 +11,7 @@ from app.models.batch import TbBatch
 from app.models.batch_data import TbSampling
 from app.models.calc_full import TbCalcFull
 from app.models.calc_summary import TbCalcSummary
+from app.models.experiment import TbExpPlan
 
 CALC_VERSION = "v2"
 ZERO = Decimal("0")
@@ -203,13 +204,23 @@ def _get_calc_sample(db: Session, batch: TbBatch, samplings: list[TbSampling]) -
     return None
 
 
+def resolve_compare_batch_id(db: Session, batch: TbBatch) -> str | None:
+    compare_batch_ids = [batch.cmp_batch_id] if batch.cmp_batch_id else []
+    if (batch.cmp_type or "").upper() == "ALL":
+        plan = db.get(TbExpPlan, batch.exp_id)
+        if plan and plan.cmp_batch_id:
+            compare_batch_ids.append(plan.cmp_batch_id)
+
+    for compare_batch_id in compare_batch_ids:
+        if compare_batch_id == batch.batch_id:
+            continue
+        if db.get(TbBatch, compare_batch_id) is not None:
+            return compare_batch_id
+    return None
+
+
 def _compare_batch_id(db: Session, batch: TbBatch) -> str | None:
-    compare_batch_id = batch.cmp_batch_id
-    if not compare_batch_id or compare_batch_id == batch.batch_id:
-        return None
-    if db.get(TbBatch, compare_batch_id) is None:
-        return None
-    return compare_batch_id
+    return resolve_compare_batch_id(db, batch)
 
 
 def _missing_constants(batch: TbBatch) -> bool:

@@ -31,6 +31,7 @@ from app.services.calculation_service import (
     build_compare_meta_for_full_records,
     get_calculation,
     get_calculation_status,
+    resolve_compare_batch_id,
     run_calculation,
     save_calc_sample,
 )
@@ -903,12 +904,7 @@ def _calc_sampling_time_by_sample_id(db: DbSession, sample_ids: list[int]) -> di
 
 
 def _batch_compare_batch_id(db: DbSession, batch: TbBatch) -> str | None:
-    compare_batch_id = batch.cmp_batch_id
-    if not compare_batch_id or compare_batch_id == batch.batch_id:
-        return None
-    if db.get(TbBatch, compare_batch_id) is None:
-        return None
-    return compare_batch_id
+    return resolve_compare_batch_id(db, batch)
 
 
 def _has_calc_full_compare_columns(db: DbSession) -> bool:
