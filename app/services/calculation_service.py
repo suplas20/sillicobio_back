@@ -594,12 +594,15 @@ def _has_calc_full_compare_columns(db: Session) -> bool:
 
 
 def _full_response(row: dict[str, Any]) -> dict:
-    return {key: _serialize(value) for key, value in row.items() if not key.startswith("_")}
+    data = {key: _serialize(value) for key, value in row.items() if not key.startswith("_")}
+    data["tooltips"] = _tooltip_map({key: value for key, value in row.items() if not key.startswith("_")})
+    return data
 
 
 def _summary_response(row: dict[str, Any], sample_id: int | None) -> dict:
     data = {key: _serialize(value) for key, value in row.items()}
     data["sample_id"] = sample_id
+    data["tooltips"] = _tooltip_map(row)
     return data
 
 
@@ -609,7 +612,7 @@ def _full_model_response(
     sampling_time: Decimal | None = None,
     include_compare: bool = True,
 ) -> dict:
-    return {
+    data = {
         "sample_id": row.sample_id,
         "base_sample_id": row.sample_id,
         "sampling_time": _display_number(sampling_time),
@@ -647,6 +650,41 @@ def _full_model_response(
         "matched_sample_id": compare_meta.get("matched_sample_id") if include_compare else None,
         "matched_sampling_time": _display_number(compare_meta.get("matched_sampling_time")) if include_compare else None,
     }
+    data["tooltips"] = _tooltip_map(
+        {
+            "sampling_time": sampling_time,
+            "base_sampling_time": sampling_time,
+            "age": row.age,
+            "lutein": row.lutein,
+            "max_lutein": row.max_lutein,
+            "production": row.production,
+            "yield_pct": row.yield_pct,
+            "productivity": row.productivity,
+            "ts": row.ts,
+            "o_i": row.o_i,
+            "scr": row.scr,
+            "sscr": row.sscr,
+            "yx_s": row.yx_s,
+            "abs_yield_up": compare_meta.get("abs_yield_up") if include_compare else None,
+            "prod_up": compare_meta.get("prod_up") if include_compare else None,
+            "current_od": row.current_od,
+            "max_od": row.max_od,
+            "delta_od": row.delta_od,
+            "lycopene": row.lycopene,
+            "a_carotene": row.a_carotene,
+            "b_carotene": row.b_carotene,
+            "citric_acid": row.citric_acid,
+            "pyruvic_acid": row.pyruvic_acid,
+            "succinic_acid": row.succinic_acid,
+            "lactic_acid": row.lactic_acid,
+            "acetic_acid": row.acetic_acid,
+            "compare_age": compare_meta.get("compare_age") if include_compare else None,
+            "compare_sampling_time": compare_meta.get("compare_sampling_time") if include_compare else None,
+            "compare_time_diff": compare_meta.get("compare_time_diff") if include_compare else None,
+            "matched_sampling_time": compare_meta.get("matched_sampling_time") if include_compare else None,
+        }
+    )
+    return data
 
 
 def _summary_model_response(
@@ -656,7 +694,7 @@ def _summary_model_response(
     compare_meta: dict[str, Any] | None = None,
 ) -> dict:
     compare_meta = compare_meta or {}
-    return {
+    data = {
         "sample_id": sample_id,
         "age": _display_number(row.age),
         "final_lutein": _display_number(row.final_lutein),
@@ -691,6 +729,39 @@ def _summary_model_response(
         "final_lactic_acid": _display_number(row.final_lactic),
         "final_acetic_acid": _display_number(row.final_acetic),
     }
+    data["tooltips"] = _tooltip_map(
+        {
+            "age": row.age,
+            "final_lutein": row.final_lutein,
+            "max_lutein": row.max_lutein,
+            "yield_pct": row.yield_pct,
+            "productivity": row.productivity,
+            "production": row.production,
+            "ts": row.ts,
+            "o_i": row.o_i,
+            "scr": row.scr,
+            "sscr": row.sscr,
+            "yx_s": row.yx_s,
+            "abs_yield_up": compare_meta.get("abs_yield_up") if include_compare else None,
+            "prod_up": compare_meta.get("prod_up") if include_compare else None,
+            "compare_age": compare_meta.get("compare_age") if include_compare else None,
+            "compare_sampling_time": compare_meta.get("compare_sampling_time") if include_compare else None,
+            "compare_time_diff": compare_meta.get("compare_time_diff") if include_compare else None,
+            "matched_sampling_time": compare_meta.get("matched_sampling_time") if include_compare else None,
+            "max_od": row.max_od,
+            "fn": row.fn,
+            "delta_od": row.delta_od,
+            "final_lycopene": row.final_lycopene,
+            "final_a_carotene": row.final_a_carotene,
+            "final_b_carotene": row.final_b_carotene,
+            "final_citric_acid": row.final_citric,
+            "final_pyruvic_acid": row.final_pyruvic,
+            "final_succinic_acid": row.final_succinic,
+            "final_lactic_acid": row.final_lactic,
+            "final_acetic_acid": row.final_acetic,
+        }
+    )
+    return data
 
 
 def _calculated_at(full_records: list[TbCalcFull], summary_record: TbCalcSummary | None) -> str | None:
@@ -709,6 +780,16 @@ def _serialize(value):
     if hasattr(value, "isoformat"):
         return value.isoformat()
     return value
+
+
+def _tooltip_map(values: dict[str, Any]) -> dict[str, str]:
+    return {key: _tooltip_value(value) for key, value in values.items() if _tooltip_value(value) is not None}
+
+
+def _tooltip_value(value: Any) -> str | None:
+    if isinstance(value, Decimal):
+        return format(value, "f")
+    return None
 
 
 def _display_number(value: Decimal | float | int | None):

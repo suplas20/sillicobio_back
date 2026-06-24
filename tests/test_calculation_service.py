@@ -3,8 +3,16 @@ from types import SimpleNamespace
 import unittest
 
 from app.models.batch import TbBatch
+from app.models.calc_full import TbCalcFull
+from app.models.calc_summary import TbCalcSummary
 from app.models.experiment import TbExpPlan
-from app.services.calculation_service import _apply_compare, _calculate_full_rows, resolve_compare_batch_id
+from app.services.calculation_service import (
+    _apply_compare,
+    _calculate_full_rows,
+    _full_model_response,
+    _summary_model_response,
+    resolve_compare_batch_id,
+)
 
 
 class CalculationServiceTest(unittest.TestCase):
@@ -113,6 +121,37 @@ class CalculationServiceTest(unittest.TestCase):
         compare_batch_id = resolve_compare_batch_id(db, db.batches["BATCH01"])
 
         self.assertEqual(compare_batch_id, "BATCH03")
+
+    def test_calculation_responses_include_unrounded_tooltip_values(self):
+        full = TbCalcFull(
+            calc_id=1,
+            batch_id="BATCH01",
+            sample_id=10,
+            age=Decimal("1.23456"),
+            yield_pct=Decimal("2.34567"),
+        )
+        summary = TbCalcSummary(
+            batch_id="BATCH01",
+            age=Decimal("3.45678"),
+            final_lutein=Decimal("4.56789"),
+        )
+        compare_meta = {
+            "compare_sampling_time": Decimal("5.67891"),
+            "abs_yield_up": Decimal("6.78912"),
+        }
+
+        full_response = _full_model_response(full, compare_meta, Decimal("7.89123"))
+        summary_response = _summary_model_response(summary, sample_id=10, compare_meta=compare_meta)
+
+        self.assertEqual(full_response["age"], 1.235)
+        self.assertEqual(full_response["tooltips"]["age"], "1.23456")
+        self.assertEqual(full_response["tooltips"]["yield_pct"], "2.34567")
+        self.assertEqual(full_response["tooltips"]["sampling_time"], "7.89123")
+        self.assertEqual(full_response["tooltips"]["compare_sampling_time"], "5.67891")
+        self.assertEqual(full_response["tooltips"]["abs_yield_up"], "6.78912")
+        self.assertEqual(summary_response["age"], 3.457)
+        self.assertEqual(summary_response["tooltips"]["age"], "3.45678")
+        self.assertEqual(summary_response["tooltips"]["final_lutein"], "4.56789")
 
 
 def _batch(batch_id, exp_id="PLAN01", cmp_type=None, cmp_batch_id=None):

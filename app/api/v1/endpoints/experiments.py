@@ -8,6 +8,7 @@ from app.api.v1.endpoints.plans import update_plan as update_plan_api
 from app.models.batch import TbBatch
 from app.models.experiment import TbExpPlan
 from app.schemas.api_schema import PlanSaveRequest
+from app.utils.date_filters import datetime_range
 from app.utils.formatters import yyyymmdd
 
 
@@ -20,6 +21,8 @@ def list_experiments(
     member: CurrentMember,
     id: str | None = None,
     purpose: str | None = None,
+    createdFrom: str | None = None,
+    createdTo: str | None = None,
     page: int = Query(1, ge=1),
     size: int = Query(10, ge=1, le=100),
 ) -> dict:
@@ -31,6 +34,13 @@ def list_experiments(
     if purpose:
         stmt = stmt.where(TbExpPlan.purpose.ilike(f"%{purpose}%"))
         count_stmt = count_stmt.where(TbExpPlan.purpose.ilike(f"%{purpose}%"))
+    start, end = datetime_range(createdFrom, createdTo, "createdFrom", "createdTo")
+    if start:
+        stmt = stmt.where(TbExpPlan.reg_dt >= start)
+        count_stmt = count_stmt.where(TbExpPlan.reg_dt >= start)
+    if end:
+        stmt = stmt.where(TbExpPlan.reg_dt < end)
+        count_stmt = count_stmt.where(TbExpPlan.reg_dt < end)
     total = db.scalar(count_stmt) or 0
     plans = db.scalars(stmt.order_by(TbExpPlan.reg_dt.desc()).offset((page - 1) * size).limit(size)).all()
     return {"total": total, "page": page, "size": size, "items": [_experiment_response(plan) for plan in plans]}

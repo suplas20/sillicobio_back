@@ -610,6 +610,8 @@ Set-Cookie: SESSION=<server-session-id>; HttpOnly; Path=/; SameSite=Lax
 | `planId` | string | 실험 ID |
 | `batchId` | string | 배치 ID |
 | `purpose` | string | 실험목적 검색 |
+| `createdFrom` | string | 배치 등록일 시작, `YYYYMMDD` 또는 `YYYY-MM-DD` |
+| `createdTo` | string | 배치 등록일 종료, `YYYYMMDD` 또는 `YYYY-MM-DD` |
 | `sort` | string | 기본값 `created,desc`. `created`, `batchId`, `planId`, `purpose` 기준 정렬 가능 |
 | `page` | number | 페이지 번호 |
 | `size` | number | 페이지 크기 |
@@ -1028,12 +1030,19 @@ Set-Cookie: SESSION=<server-session-id>; HttpOnly; Path=/; SameSite=Lax
       "compare_time_diff": 0.5,
       "matched_batch_id": "LAB00001_BAT02",
       "matched_sample_id": 201,
-      "matched_sampling_time": 23.5
+      "matched_sampling_time": 23.5,
+      "tooltips": {
+        "yield_pct": "28.000000",
+        "productivity": "0.940000",
+        "compare_sampling_time": "23.50"
+      }
     }
   ],
   "summary": {}
 }
 ```
+
+산출전체 `full[]`, 산출요약 `summary`, `calcFull[]`, `calcSummary`에는 `tooltips` 객체가 포함됩니다. 화면 표시용 수치 필드는 기존처럼 사용하고, 툴팁에는 `row.tooltips?.[fieldName]`의 보정 없는 원본 문자열을 표시하세요.
 
 #### 산출전체 비교배치 매칭 기준
 
@@ -1114,6 +1123,10 @@ Set-Cookie: SESSION=<server-session-id>; HttpOnly; Path=/; SameSite=Lax
 | `planId` | string | 실험 ID |
 | `batchId` | string | 배치 ID |
 | `purpose` | string | 실험목적 검색 |
+| `createdFrom` | string | 배치 등록일 시작, `YYYYMMDD` 또는 `YYYY-MM-DD` |
+| `createdTo` | string | 배치 등록일 종료, `YYYYMMDD` 또는 `YYYY-MM-DD` |
+| `startDtFrom` | string | 배치 시작일 시작, `YYYYMMDD` 또는 `YYYY-MM-DD` |
+| `startDtTo` | string | 배치 시작일 종료, `YYYYMMDD` 또는 `YYYY-MM-DD` |
 | `sort` | string | 기본값 `created,desc`. `created`, `batchId`, `planId`, `purpose`, `startDt` 기준 정렬 가능 |
 | `page` | number | 페이지 번호 |
 | `size` | number | 페이지 크기 |

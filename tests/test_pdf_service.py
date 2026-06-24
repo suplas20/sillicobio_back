@@ -1,6 +1,13 @@
 import unittest
+from decimal import Decimal
 
-from app.services.pdf_service import _render_calc_view_html, _render_result_html, create_calc_view_pdf, create_result_pdf
+from app.services.pdf_service import (
+    _pdf_value,
+    _render_calc_view_html,
+    _render_result_html,
+    create_calc_view_pdf,
+    create_result_pdf,
+)
 
 
 class PdfServiceTest(unittest.TestCase):
@@ -61,3 +68,33 @@ class PdfServiceTest(unittest.TestCase):
         self.assertIn("LAB00001_BAT02", html)
         self.assertIn("비교배치 데이터", html)
         self.assertNotIn("overflow: hidden", html)
+
+    def test_pdf_numeric_values_are_displayed_with_three_decimals(self):
+        data = self._sample_data()
+        data["batch"]["params"]["prepTime"] = Decimal("12.3455")
+        data["sampling"] = [
+            {
+                "samplingTime": Decimal("1.2344"),
+                "od": Decimal("2.2345"),
+                "targetProdConc": Decimal("3"),
+            }
+        ]
+        data["calcFull"] = [{"sampling_time": Decimal("4.2345"), "yield_pct": Decimal("5.2344")}]
+        data["calcSummary"] = {"age": Decimal("6.2345"), "final_lutein": Decimal("7.2344"), "fn": Decimal("8")}
+
+        html = _render_result_html(data)
+        calc_view_html = _render_calc_view_html(data)
+
+        self.assertIn("12.346", calc_view_html)
+        self.assertIn("1.234", html)
+        self.assertIn("2.235", html)
+        self.assertIn("3.000", html)
+        self.assertIn("4.235", html)
+        self.assertIn("5.234", html)
+        self.assertIn("6.235", html)
+        self.assertIn("7.234", html)
+        self.assertIn("8.000", html)
+
+    def test_pdf_value_uses_half_up_rounding(self):
+        self.assertEqual(_pdf_value(Decimal("1.2345")), "1.235")
+        self.assertEqual(_pdf_value(Decimal("1.2344")), "1.234")

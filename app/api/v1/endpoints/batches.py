@@ -36,6 +36,7 @@ from app.services.calculation_service import (
     save_calc_sample,
 )
 from app.services.pdf_service import create_calc_view_pdf
+from app.utils.date_filters import datetime_range
 from app.utils.formatters import number, yyyymmdd
 
 
@@ -49,6 +50,8 @@ def list_batches(
     planId: str | None = None,
     batchId: str | None = None,
     purpose: str | None = None,
+    createdFrom: str | None = None,
+    createdTo: str | None = None,
     sort: str = "created,desc",
     page: int = Query(1, ge=1),
     size: int = Query(10, ge=1, le=100),
@@ -64,6 +67,13 @@ def list_batches(
     if purpose:
         stmt = stmt.where(TbExpPlan.purpose.ilike(f"%{purpose}%"))
         count_stmt = count_stmt.where(TbExpPlan.purpose.ilike(f"%{purpose}%"))
+    start, end = datetime_range(createdFrom, createdTo, "createdFrom", "createdTo")
+    if start:
+        stmt = stmt.where(TbBatch.reg_dt >= start)
+        count_stmt = count_stmt.where(TbBatch.reg_dt >= start)
+    if end:
+        stmt = stmt.where(TbBatch.reg_dt < end)
+        count_stmt = count_stmt.where(TbBatch.reg_dt < end)
     total = db.scalar(count_stmt) or 0
     rows = db.execute(stmt.order_by(*_batch_list_order_by(sort)).offset((page - 1) * size).limit(size)).all()
     return {
@@ -837,10 +847,14 @@ def _sampling_response(row: TbSampling, calc_sample_id: int | None = None) -> di
 
 
 def _calc_full_response(row: TbCalcFull, compare_meta: dict | None = None, sampling_time=None, include_compare: bool = True) -> dict:
-    data = {column.name: _serialize(getattr(row, column.name)) for column in TbCalcFull.__table__.columns if column.name != "batch_id"}
+    raw_values = {column.name: getattr(row, column.name) for column in TbCalcFull.__table__.columns if column.name != "batch_id"}
+    data = {key: _serialize(value) for key, value in raw_values.items()}
     data["base_sample_id"] = row.sample_id
     data["base_sampling_time"] = _serialize(sampling_time)
     data["sampling_time"] = _serialize(sampling_time)
+    tooltip_values = dict(raw_values)
+    tooltip_values["base_sampling_time"] = sampling_time
+    tooltip_values["sampling_time"] = sampling_time
     compare_meta = compare_meta or {}
     if not include_compare:
         data["abs_yield_up"] = None
@@ -853,6 +867,7 @@ def _calc_full_response(row: TbCalcFull, compare_meta: dict | None = None, sampl
         data["matched_batch_id"] = None
         data["matched_sample_id"] = None
         data["matched_sampling_time"] = None
+        data["tooltips"] = _tooltip_map(tooltip_values)
         return data
     data["compare_batch_id"] = compare_meta.get("compare_batch_id")
     data["compare_sample_id"] = compare_meta.get("compare_sample_id")
@@ -864,11 +879,24 @@ def _calc_full_response(row: TbCalcFull, compare_meta: dict | None = None, sampl
     data["matched_sampling_time"] = _serialize(compare_meta.get("matched_sampling_time"))
     data["abs_yield_up"] = _serialize(compare_meta.get("abs_yield_up"))
     data["prod_up"] = _serialize(compare_meta.get("prod_up"))
+    tooltip_values.update(
+        {
+            "compare_age": compare_meta.get("compare_age"),
+            "compare_sampling_time": compare_meta.get("compare_sampling_time"),
+            "compare_time_diff": compare_meta.get("compare_time_diff"),
+            "matched_sampling_time": compare_meta.get("matched_sampling_time"),
+            "abs_yield_up": compare_meta.get("abs_yield_up"),
+            "prod_up": compare_meta.get("prod_up"),
+        }
+    )
+    data["tooltips"] = _tooltip_map(tooltip_values)
     return data
 
 
 def _calc_summary_response(row: TbCalcSummary, include_compare: bool = True, compare_meta: dict | None = None) -> dict:
-    data = {column.name: _serialize(getattr(row, column.name)) for column in TbCalcSummary.__table__.columns if column.name != "batch_id"}
+    raw_values = {column.name: getattr(row, column.name) for column in TbCalcSummary.__table__.columns if column.name != "batch_id"}
+    data = {key: _serialize(value) for key, value in raw_values.items()}
+    tooltip_values = dict(raw_values)
     if not include_compare:
         data["abs_yield_up"] = None
         data["prod_up"] = None
@@ -892,6 +920,17 @@ def _calc_summary_response(row: TbCalcSummary, include_compare: bool = True, com
         data["matched_batch_id"] = compare_meta.get("matched_batch_id")
         data["matched_sample_id"] = compare_meta.get("matched_sample_id")
         data["matched_sampling_time"] = _serialize(compare_meta.get("matched_sampling_time"))
+        tooltip_values.update(
+            {
+                "abs_yield_up": compare_meta.get("abs_yield_up"),
+                "prod_up": compare_meta.get("prod_up"),
+                "compare_age": compare_meta.get("compare_age"),
+                "compare_sampling_time": compare_meta.get("compare_sampling_time"),
+                "compare_time_diff": compare_meta.get("compare_time_diff"),
+                "matched_sampling_time": compare_meta.get("matched_sampling_time"),
+            }
+        )
+    data["tooltips"] = _tooltip_map(tooltip_values)
     return data
 
 
@@ -954,6 +993,16 @@ def _serialize(value):
     if hasattr(value, "as_tuple"):
         return number(value)
     return value
+
+
+def _tooltip_map(values: dict) -> dict:
+    return {key: _tooltip_value(value) for key, value in values.items() if _tooltip_value(value) is not None}
+
+
+def _tooltip_value(value):
+    if hasattr(value, "as_tuple"):
+        return format(value, "f")
+    return None
 
 
 def _parse_date(value: str, field_name: str) -> datetime:

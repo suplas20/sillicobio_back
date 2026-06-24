@@ -12,6 +12,7 @@ from app.models.batch import TbBatch
 from app.models.exp_file import TbExpFile
 from app.models.experiment import TbExpPlan
 from app.schemas.api_schema import PlanSaveRequest
+from app.utils.date_filters import datetime_range
 from app.utils.formatters import yyyymmdd
 
 
@@ -38,14 +39,13 @@ def list_plans(
     if purpose:
         stmt = stmt.where(TbExpPlan.purpose.ilike(f"%{purpose}%"))
         count_stmt = count_stmt.where(TbExpPlan.purpose.ilike(f"%{purpose}%"))
-    if createdFrom:
-        start = _parse_date_filter(createdFrom, "createdFrom")
+    start, end = datetime_range(createdFrom, createdTo, "createdFrom", "createdTo")
+    if start:
         stmt = stmt.where(TbExpPlan.reg_dt >= start)
         count_stmt = count_stmt.where(TbExpPlan.reg_dt >= start)
-    if createdTo:
-        end = _parse_date_filter(createdTo, "createdTo").replace(hour=23, minute=59, second=59)
-        stmt = stmt.where(TbExpPlan.reg_dt <= end)
-        count_stmt = count_stmt.where(TbExpPlan.reg_dt <= end)
+    if end:
+        stmt = stmt.where(TbExpPlan.reg_dt < end)
+        count_stmt = count_stmt.where(TbExpPlan.reg_dt < end)
 
     direction = sort.split(",")[-1] if sort else "desc"
     order_by = TbExpPlan.reg_dt.asc() if direction == "asc" else TbExpPlan.reg_dt.desc()
@@ -188,21 +188,6 @@ def _file_response(record: TbExpFile) -> dict:
         "fileSize": record.file_size,
         "mimeType": record.mime_type,
     }
-
-
-def _parse_date_filter(value: str, field_name: str) -> datetime:
-    for fmt in ("%Y%m%d", "%Y-%m-%d"):
-        try:
-            return datetime.strptime(value, fmt)
-        except ValueError:
-            pass
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail={
-            "code": "INVALID_DATE",
-            "message": f"{field_name} must be YYYYMMDD or YYYY-MM-DD.",
-        },
-    )
 
 
 def _save_upload(file: UploadFile, area: str, resource_id: str) -> Path:

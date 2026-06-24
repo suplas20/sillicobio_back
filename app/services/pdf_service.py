@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import tempfile
 from datetime import datetime
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,7 @@ CALC_VIEW_TEMPLATE = "calc_view_template.html"
 CACHE_DIR = Path(tempfile.gettempdir()) / "sillicobio-font-cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("XDG_CACHE_HOME", str(CACHE_DIR))
+PDF_NUMBER_QUANT = Decimal("0.001")
 
 
 def create_result_pdf(view: dict) -> bytes:
@@ -91,13 +93,13 @@ def _batch_info_context(view: dict) -> dict[str, Any]:
         "start_dt": batch.get("startDt"),
         "purpose": plan.get("purpose") or batch.get("purpose"),
         "strain": plan.get("strain"),
-        "prep_time": params.get("prepTime"),
-        "equip_vol": params.get("equipVol"),
-        "purify_yield": params.get("purifyYield"),
-        "dcw_od_factor": params.get("dcwOdFactor"),
-        "feed_glucose_conc": params.get("feedGlucoseConc"),
-        "feed_density": params.get("feedDensity"),
-        "feed_ggf": params.get("feedGlucosePerFeed"),
+        "prep_time": _pdf_value(params.get("prepTime")),
+        "equip_vol": _pdf_value(params.get("equipVol")),
+        "purify_yield": _pdf_value(params.get("purifyYield")),
+        "dcw_od_factor": _pdf_value(params.get("dcwOdFactor")),
+        "feed_glucose_conc": _pdf_value(params.get("feedGlucoseConc")),
+        "feed_density": _pdf_value(params.get("feedDensity")),
+        "feed_ggf": _pdf_value(params.get("feedGlucosePerFeed")),
     }
 
 
@@ -127,25 +129,25 @@ def _researcher_context(row: dict) -> dict[str, Any]:
 def _sampling_context(row: dict) -> dict[str, Any]:
     return {
         "is_calc_sample": row.get("isCalcSample") if "isCalcSample" in row else row.get("is_calc_sample"),
-        "sampling_time": row.get("samplingTime") if "samplingTime" in row else row.get("sampling_time"),
-        "od": row.get("od"),
-        "feed_weight": row.get("feedWeight") if "feedWeight" in row else row.get("feed_weight"),
-        "broth_volume": row.get("brothVolume") if "brothVolume" in row else row.get("broth_volume"),
-        "target_prod_conc": row.get("targetProdConc") if "targetProdConc" in row else row.get("target_prod_conc"),
-        "glucose_conc": row.get("glucoseConc") if "glucoseConc" in row else row.get("glucose_conc"),
-        "lycopene": row.get("lycopene"),
-        "a_carotene": row.get("aCarotene") if "aCarotene" in row else row.get("a_carotene"),
-        "b_carotene": row.get("bCarotene") if "bCarotene" in row else row.get("b_carotene"),
-        "citric_acid": row.get("citricAcid") if "citricAcid" in row else row.get("citric_acid"),
-        "pyruvic_acid": row.get("pyruvicAcid") if "pyruvicAcid" in row else row.get("pyruvic_acid"),
-        "succinic_acid": row.get("succinicAcid") if "succinicAcid" in row else row.get("succinic_acid"),
-        "lactic_acid": row.get("lacticAcid") if "lacticAcid" in row else row.get("lactic_acid"),
-        "acetic_acid": row.get("aceticAcid") if "aceticAcid" in row else row.get("acetic_acid"),
+        "sampling_time": _pdf_value(row.get("samplingTime") if "samplingTime" in row else row.get("sampling_time")),
+        "od": _pdf_value(row.get("od")),
+        "feed_weight": _pdf_value(row.get("feedWeight") if "feedWeight" in row else row.get("feed_weight")),
+        "broth_volume": _pdf_value(row.get("brothVolume") if "brothVolume" in row else row.get("broth_volume")),
+        "target_prod_conc": _pdf_value(row.get("targetProdConc") if "targetProdConc" in row else row.get("target_prod_conc")),
+        "glucose_conc": _pdf_value(row.get("glucoseConc") if "glucoseConc" in row else row.get("glucose_conc")),
+        "lycopene": _pdf_value(row.get("lycopene")),
+        "a_carotene": _pdf_value(row.get("aCarotene") if "aCarotene" in row else row.get("a_carotene")),
+        "b_carotene": _pdf_value(row.get("bCarotene") if "bCarotene" in row else row.get("b_carotene")),
+        "citric_acid": _pdf_value(row.get("citricAcid") if "citricAcid" in row else row.get("citric_acid")),
+        "pyruvic_acid": _pdf_value(row.get("pyruvicAcid") if "pyruvicAcid" in row else row.get("pyruvic_acid")),
+        "succinic_acid": _pdf_value(row.get("succinicAcid") if "succinicAcid" in row else row.get("succinic_acid")),
+        "lactic_acid": _pdf_value(row.get("lacticAcid") if "lacticAcid" in row else row.get("lactic_acid")),
+        "acetic_acid": _pdf_value(row.get("aceticAcid") if "aceticAcid" in row else row.get("acetic_acid")),
     }
 
 
 def _calc_full_context(row: dict) -> dict[str, Any]:
-    data = dict(row)
+    data = {key: _pdf_value(value) for key, value in row.items()}
     data["age"] = row.get("sampling_time") if row.get("sampling_time") is not None else row.get("age")
     data["sampling_time"] = row.get("sampling_time") if row.get("sampling_time") is not None else row.get("age")
     data["compare_age"] = (
@@ -153,13 +155,13 @@ def _calc_full_context(row: dict) -> dict[str, Any]:
         if row.get("compare_sampling_time") is not None
         else row.get("compare_age")
     )
-    return data
+    return {key: _pdf_value(value) for key, value in data.items()}
 
 
 def _calc_summary_context(row: dict) -> dict[str, Any]:
     if not row:
         return {}
-    data = dict(row)
+    data = {key: _pdf_value(value) for key, value in row.items()}
     data["compare_age"] = (
         row.get("compare_sampling_time")
         if row.get("compare_sampling_time") is not None
@@ -195,7 +197,19 @@ def _calc_summary_context(row: dict) -> dict[str, Any]:
     data["acetic_acid"] = (
         row.get("final_acetic_acid") if row.get("final_acetic_acid") is not None else row.get("acetic_acid")
     )
-    return data
+    return {key: _pdf_value(value) for key, value in data.items()}
+
+
+def _pdf_value(value: Any) -> Any:
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, int | float | Decimal):
+        try:
+            rounded = Decimal(str(value)).quantize(PDF_NUMBER_QUANT, rounding=ROUND_HALF_UP)
+        except (InvalidOperation, ValueError):
+            return value
+        return f"{rounded:.3f}"
+    return value
 
 
 def _safe_filename(value: str) -> str:

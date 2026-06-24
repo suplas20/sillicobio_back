@@ -11,6 +11,7 @@ from app.models.batch import TbBatch
 from app.models.experiment import TbExpPlan
 from app.schemas.api_schema import ResultPdfDownloadRequest
 from app.services.pdf_service import create_result_pdf
+from app.utils.date_filters import date_range, datetime_range
 from app.utils.formatters import yyyymmdd
 
 
@@ -24,6 +25,10 @@ def list_results(
     planId: str | None = None,
     batchId: str | None = None,
     purpose: str | None = None,
+    createdFrom: str | None = None,
+    createdTo: str | None = None,
+    startDtFrom: str | None = None,
+    startDtTo: str | None = None,
     sort: str = "created,desc",
     page: int = Query(1, ge=1),
     size: int = Query(10, ge=1, le=100),
@@ -39,6 +44,20 @@ def list_results(
     if purpose:
         stmt = stmt.where(TbExpPlan.purpose.ilike(f"%{purpose}%"))
         count_stmt = count_stmt.where(TbExpPlan.purpose.ilike(f"%{purpose}%"))
+    created_start, created_end = datetime_range(createdFrom, createdTo, "createdFrom", "createdTo")
+    if created_start:
+        stmt = stmt.where(TbBatch.reg_dt >= created_start)
+        count_stmt = count_stmt.where(TbBatch.reg_dt >= created_start)
+    if created_end:
+        stmt = stmt.where(TbBatch.reg_dt < created_end)
+        count_stmt = count_stmt.where(TbBatch.reg_dt < created_end)
+    start_dt_from, start_dt_to = date_range(startDtFrom, startDtTo, "startDtFrom", "startDtTo")
+    if start_dt_from:
+        stmt = stmt.where(TbBatch.start_dt >= start_dt_from)
+        count_stmt = count_stmt.where(TbBatch.start_dt >= start_dt_from)
+    if start_dt_to:
+        stmt = stmt.where(TbBatch.start_dt <= start_dt_to)
+        count_stmt = count_stmt.where(TbBatch.start_dt <= start_dt_to)
     total = db.scalar(count_stmt) or 0
     rows = db.execute(stmt.order_by(*_result_list_order_by(sort)).offset((page - 1) * size).limit(size)).all()
     return {
