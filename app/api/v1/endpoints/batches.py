@@ -219,10 +219,12 @@ def search_batches(
     best_batch = (
         select(
             TbBestBatch.batch_id.label("batch_id"),
-            func.min(TbBestBatch.sort_ord).label("sort_ord"),
-            func.min(TbBestBatch.reg_dt).label("best_reg_dt"),
+            TbBestBatch.sort_ord.label("sort_ord"),
+            TbBestBatch.reg_dt.label("best_reg_dt"),
+            func.row_number()
+            .over(order_by=(TbBestBatch.reg_dt.desc(), TbBestBatch.best_batch_id.desc()))
+            .label("rn"),
         )
-        .group_by(TbBestBatch.batch_id)
         .subquery()
     )
 
@@ -284,7 +286,7 @@ def search_batches(
             case((best_batch.c.batch_id.is_not(None), True), else_=False).label("is_best"),
         )
         .outerjoin(last_sampling, (TbBatch.batch_id == last_sampling.c.batch_id) & (last_sampling.c.rn == 1))
-        .outerjoin(best_batch, TbBatch.batch_id == best_batch.c.batch_id)
+        .outerjoin(best_batch, (TbBatch.batch_id == best_batch.c.batch_id) & (best_batch.c.rn == 1))
         .order_by(
             sort_expr.nullslast(),
             case((best_batch.c.batch_id.is_not(None), 0), else_=1),
