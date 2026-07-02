@@ -222,8 +222,14 @@ def search_batches(
             TbBestBatch.sort_ord.label("sort_ord"),
             TbBestBatch.reg_dt.label("best_reg_dt"),
             func.row_number()
+            .over(
+                partition_by=TbBestBatch.batch_id,
+                order_by=(TbBestBatch.reg_dt.desc(), TbBestBatch.best_batch_id.desc()),
+            )
+            .label("batch_rn"),
+            func.row_number()
             .over(order_by=(TbBestBatch.reg_dt.desc(), TbBestBatch.best_batch_id.desc()))
-            .label("rn"),
+            .label("current_rn"),
         )
         .subquery()
     )
@@ -283,10 +289,11 @@ def search_batches(
             last_sampling.c.succinic_acid,
             last_sampling.c.lactic_acid,
             last_sampling.c.acetic_acid,
-            case((best_batch.c.batch_id.is_not(None), True), else_=False).label("is_best"),
+            case((best_batch.c.current_rn == 1, True), else_=False).label("is_best"),
+            best_batch.c.best_reg_dt.label("best_registered_at"),
         )
         .outerjoin(last_sampling, (TbBatch.batch_id == last_sampling.c.batch_id) & (last_sampling.c.rn == 1))
-        .outerjoin(best_batch, (TbBatch.batch_id == best_batch.c.batch_id) & (best_batch.c.rn == 1))
+        .outerjoin(best_batch, (TbBatch.batch_id == best_batch.c.batch_id) & (best_batch.c.batch_rn == 1))
         .order_by(
             sort_expr.nullslast(),
             case((best_batch.c.batch_id.is_not(None), 0), else_=1),
@@ -674,12 +681,14 @@ SAMPLING_COLUMNS = [
 
 def _batch_search_response(row) -> dict:
     last_sampled_at = row["last_sampled_at"]
+    best_registered_at = row["best_registered_at"]
     return {
         "batch_id": row["batch_id"],
         "exp_id": row["exp_id"],
         "batch_no": row["batch_no"],
         "batch_name": row["batch_id"],
         "is_best": row["is_best"],
+        "best_registered_at": best_registered_at.strftime("%Y-%m-%d %H:%M:%S") if best_registered_at else None,
         "last_sampled_at": last_sampled_at.isoformat() if last_sampled_at else None,
         "sampling_time": number(row["sampling_time"]),
         "od": number(row["od"]),
